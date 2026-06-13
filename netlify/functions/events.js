@@ -1,12 +1,15 @@
-// /api/events - listings CRUD, join-code reveal, funnel tracking, platform stats, boosting, search.
+// /api/events - listings CRUD, join-code reveal, funnel tracking, stats, boosting, search.
+// New: AI moderation on submit, monthly plan caps (6/14/21), live member count per
+// event (cached, capped at 40), and flagged listings forwarded to a review channel.
 import {
-  json, eventsStore, requireUser, usersStore, id, clampStr, rateLimit, audit, auditError, decrypt,
+  json, eventsStore, requireUser, usersStore, id, clampStr, guard, audit, auditError, decrypt,
+  aiModerateEvent, effectivePlan, planCap, planName, cacheGet, cacheSet, monthKey,
+  postDiscordWebhook, BRAND, PLAYER_CAP,
 } from "../lib/util.js";
 
 const MAX_DURATION_MIN = 90;
 const MIN_DURATION_MIN = 15;
-const DAILY_EVENT_CAP = 10;
-const ERLC_BASE = "https://api.policeroleplay.community/v1";
+const ERLC_BASE = "https://api.erlc.gg/v1";
 
 const endMs = (ev) => new Date(ev.startsAt).getTime() + (ev.durationMin || 60) * 60000;
 const isEnded = (ev) => Date.now() > endMs(ev);
@@ -14,22 +17,27 @@ const isLive = (ev) => { const s = new Date(ev.startsAt).getTime(); return Date.
 
 async function fetchT(url, opts = {}, ms = 4000) { return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) }); }
 
-const countCache = new Map();
-async function getLivePlayerCount(ev) {
-  const cached = countCache.get(ev.userId);
-  if (cached && Date.now() - cached.at < 30000) return cached.count;
+// Live in-game count for the host's server. Cached per host in blob storage so it
+// actually persists between serverless invocations. Capped at the 40-player limit.
+async function getLivePlayerCount(hostUserId) {
+  const cached = await cacheGet(`players_${hostUserId}`);
+  if (cached !== null) return cached;
+  let count = null;
   try {
-    const hostUser = await usersStore().get(ev.userId, { type: "json" });
-    if (!hostUser || !hostUser.erlcKeyEnc) return null;
-    const key = String(decrypt(hostUser.erlcKeyEnc) || "").replace(/[\u200B-\u200D\uFEFF"'`]/g, "").trim();
-    if (!key) return null;
-    const r = await fetchT(`${ERLC_BASE}/server/players`, { headers: { "server-key": key, Accept: "application/json" } });
-    if (!r.ok) return null;
-    const players = await r.json();
-    const count = Array.isArray(players) ? players.length : null;
-    countCache.set(ev.userId, { count, at: Date.now() });
-    return count;
-  } catch { return null; }
+    const hostUser = await usersStore().get(hostUserId, { type: "json" });
+    if (hostUser && hostUser.erlcKeyEnc) {
+      const key = String(decrypt(hostUser.erlcKeyEnc) || "").replace(/[\u200B-\u200D\uFEFF"'`]/g, "").trim();
+      if (key) {
+        const r = await fetchT(`${ERLC_BASE}/server/players`, { headers: { "server-key": key, Accept: "application/json" } });
+        if (r.ok) {
+          const players = await r.json();
+          count = Array.isArray(players) ? Math.min(PLAYER_CAP, players.length) : null;
+        }
+      }
+    }
+  } catch { count = null; }
+  await cacheSet(`players_${hostUserId}`, count, 30);
+  return count;
 }
 
 const PUBLIC_FIELDS = (ev, playerCount = null) => ({
@@ -37,7 +45,7 @@ const PUBLIC_FIELDS = (ev, playerCount = null) => ({
   startsAt: ev.startsAt, durationMin: ev.durationMin, endsAt: new Date(endMs(ev)).toISOString(),
   bannerUrl: ev.bannerId ? `/api/image?id=${ev.bannerId}` : (ev.bannerUrl || null),
   hostUsername: ev.hostUsername, boosted: Boolean(ev.boosted), live: isLive(ev),
-  views: ev.views || 0, playerCount: isLive(ev) ? playerCount : null,
+  views: ev.views || 0, playerCount, maxPlayers: PLAYER_CAP,
 });
 
 async function allEvents() {
@@ -45,6 +53,34 @@ async function allEvents() {
   const { blobs } = await store.list();
   const events = await Promise.all(blobs.map((b) => store.get(b.key, { type: "json" })));
   return events.filter(Boolean);
+}
+
+function eventsThisMonth(events, userId) {
+  const mk = monthKey();
+  return events.filter((e) => e.userId === userId && monthKey(new Date(e.createdAt || e.startsAt)) === mk).length;
+}
+
+async function sendFlagged(ev, user, reason) {
+  const url = process.env.FLAGGED_WEBHOOK_URL || process.env.WATCHDOG_WEBHOOK_URL;
+  if (!url) return;
+  await postDiscordWebhook(url, {
+    username: "Gatherly Review",
+    embeds: [{
+      title: "Listing blocked by automated review",
+      color: BRAND.red,
+      thumbnail: { url: BRAND.logo },
+      description: [
+        `### ${clampStr(ev.title, 120) || "Untitled"}`,
+        `> ${clampStr(reason, 400)}`,
+        "",
+        `- Scenario: ${clampStr(ev.scenario, 60) || "n/a"}`,
+        `- Submitted by: ${user.username} (\`${user.id}\`)`,
+        ev.description ? `- Description: ${clampStr(ev.description, 300)}` : null,
+      ].filter(Boolean).join("\n"),
+      timestamp: new Date().toISOString(),
+      footer: { text: "Gatherly Review" },
+    }],
+  });
 }
 
 export default async (req) => {
@@ -66,8 +102,9 @@ async function handler(req) {
     if (filter === "upcoming") events = events.filter((e) => !isLive(e));
     if (filter === "boosted") events = events.filter((e) => e.boosted);
 
+    // Live count shown next to every active listing (live or upcoming), cached per host.
     const withCounts = await Promise.all(events.map(async (e) => {
-      const count = isLive(e) ? await getLivePlayerCount(e).catch(() => null) : null;
+      const count = await getLivePlayerCount(e.userId).catch(() => null);
       return PUBLIC_FIELDS(e, count);
     }));
 
@@ -123,6 +160,13 @@ async function handler(req) {
   const user = await requireUser(req);
   if (!user) return json({ error: "Log in first." }, 401);
 
+  // How many listings the user has left this month (for the advertise page).
+  if (action === "quota") {
+    const used = eventsThisMonth(await allEvents(), user.id);
+    const cap = planCap(effectivePlan(user));
+    return json({ used, cap, remaining: Math.max(0, cap - used), plan: effectivePlan(user), planName: planName(effectivePlan(user)) });
+  }
+
   if (action === "boost" && req.method === "POST") {
     const evId = url.searchParams.get("id");
     const ev = await store.get(evId, { type: "json" });
@@ -147,33 +191,55 @@ async function handler(req) {
   }
 
   if (action === "create" && req.method === "POST") {
-    if (!(await rateLimit(`create:${user.id}`, DAILY_EVENT_CAP, 86400))) return json({ error: "Daily event limit reached. You can list up to 10 events per day." }, 429);
+    // Anti-spam guard (watchdog-flagged), separate from the monthly plan cap.
+    const blocked = await guard(req, user, `event-create:${user.id}`, 5, 300, { kind: "event-spam", what: "Rapid event submissions.", risk: "Possible flooding of the events board." });
+    if (blocked) return blocked;
+
     const b = await req.json().catch(() => ({}));
-    if (b.website) return json({ ok: true });
+    if (b.website) return json({ ok: true }); // honeypot
+
+    // Monthly listing cap by plan (6 / 14 / 21). Not a watchdog trip, just a limit.
+    const used = eventsThisMonth(await allEvents(), user.id);
+    const cap = planCap(effectivePlan(user));
+    if (used >= cap) {
+      return json({ error: `You have used all ${cap} of your monthly listings on the ${planName(effectivePlan(user))} plan. Upgrade for more, or wait until next month.`, capReached: true, used, cap }, 403);
+    }
+
     const startsAt = new Date(b.startsAt);
     if (isNaN(startsAt)) return json({ error: "Invalid start time." }, 400);
     const durationMin = Math.min(MAX_DURATION_MIN, Math.max(MIN_DURATION_MIN, parseInt(b.durationMin, 10) || 60));
+    const title = clampStr(b.title, 80), description = clampStr(b.description, 400);
+    const scenario = clampStr(b.scenario, 60), joinCode = clampStr(b.joinCode, 32);
+    if (!title || !scenario || !joinCode) return json({ error: "Title, scenario, and join code are required." }, 400);
+
     const wantsBoost = Boolean(b.boost);
     const credits = user.credits ?? 0;
     if (wantsBoost && credits < 1) return json({ error: "You chose to boost but have no credits. Uncheck boost or buy credits." }, 402);
 
+    // AI moderation. A block does NOT create the event and does NOT spend a credit.
+    const verdict = await aiModerateEvent({ title, description, scenario, code: joinCode });
+    if (!verdict.allowed) {
+      await audit(user, "event.ai-blocked", { reason: verdict.reason, title });
+      await sendFlagged({ title, scenario, description }, user, verdict.reason);
+      return json({ ok: false, blocked: true, reason: verdict.reason || "This listing did not pass automated review.", openTicket: true });
+    }
+
     const ev = {
       id: id(), userId: user.id, hostUsername: user.username,
-      title: clampStr(b.title, 80), description: clampStr(b.description, 400),
-      scenario: clampStr(b.scenario, 60), joinCode: clampStr(b.joinCode, 32),
+      title, description, scenario, joinCode,
       startsAt: startsAt.toISOString(), durationMin,
       bannerId: b.bannerId || null, reportRecipientId: clampStr(b.reportRecipientId, 32) || null,
       views: 0, reveals: 0, boosted: false, createdAt: new Date().toISOString(),
+      moderation: { reviewed: !verdict.skipped, at: new Date().toISOString() },
     };
-    if (!ev.title || !ev.scenario || !ev.joinCode) return json({ error: "Title, scenario, and join code are required." }, 400);
 
     if (wantsBoost) {
       ev.boosted = true; ev.boostedAt = new Date().toISOString(); ev.boostedBy = user.username;
       await usersStore().setJSON(user.id, { ...user, credits: credits - 1, updatedAt: new Date().toISOString() });
     }
     await store.setJSON(ev.id, ev);
-    await audit(user, "event.create", { eventId: ev.id, boosted: wantsBoost });
-    return json({ ok: true, event: ev, boosted: wantsBoost, creditsRemaining: wantsBoost ? credits - 1 : credits });
+    await audit(user, "event.create", { eventId: ev.id, boosted: wantsBoost, aiReviewed: !verdict.skipped });
+    return json({ ok: true, approved: true, event: ev, boosted: wantsBoost, creditsRemaining: wantsBoost ? credits - 1 : credits, used: used + 1, cap });
   }
 
   if (action === "delete" && req.method === "POST") {
