@@ -1,7 +1,6 @@
 // /api/events - event listings CRUD, join-code reveal, funnel tracking, platform stats.
 import {
-  json, eventsStore, requireUser, usersStore, id, clampStr, rateLimit, clientIp, audit,
-  decrypt,
+  json, eventsStore, requireUser, usersStore, id, clampStr, rateLimit, clientIp, audit, decrypt,
 } from "../lib/util.js";
 
 const MAX_DURATION_MIN = 90;
@@ -15,14 +14,6 @@ const isLive = (ev) => {
   const s = new Date(ev.startsAt).getTime();
   return Date.now() >= s && Date.now() <= endMs(ev);
 };
-
-function getStoredKey(user) {
-  if (!user || !user.erlcKeyEnc) return null;
-  try {
-    const { decrypt: dec } = await import("../lib/util.js");
-    return String(decrypt(user.erlcKeyEnc) || "").trim();
-  } catch { return null; }
-}
 
 async function getLivePlayerCount(ev) {
   try {
@@ -67,7 +58,7 @@ export default async (req) => {
       .filter((e) => !isEnded(e))
       .sort((a, b) => (b.boosted - a.boosted) || (b.live - a.live) || (new Date(a.startsAt) - new Date(b.startsAt)));
 
-    // Fetch live player counts for live events (parallel, with timeout)
+    // Fetch live player counts for live events in parallel with a timeout
     const withCounts = await Promise.all(events.map(async (e) => {
       const count = isLive(e) ? await getLivePlayerCount(e).catch(() => null) : null;
       return PUBLIC_FIELDS(e, count);
@@ -82,11 +73,15 @@ export default async (req) => {
       .filter((e) => isEnded(e) && Date.now() - endMs(e) < 86400000)
       .sort((a, b) => endMs(b) - endMs(a))
       .slice(0, 12)
-      .map((e) => ({ id: e.id, title: e.title, scenario: e.scenario, endedAt: new Date(endMs(e)).toISOString(), peak: e.lastReport?.peakConcurrent ?? null }));
+      .map((e) => ({
+        id: e.id, title: e.title, scenario: e.scenario,
+        endedAt: new Date(endMs(e)).toISOString(),
+        peak: e.lastReport?.peakConcurrent ?? null,
+      }));
     return json({ events });
   }
 
-  // ---- live pulse ----
+  // ---- live pulse for homepage radar ----
   if (action === "pulse") {
     const events = await allEvents();
     const live = events.filter(isLive);
@@ -100,7 +95,7 @@ export default async (req) => {
     });
   }
 
-  // ---- heatmap ----
+  // ---- platform heatmap ----
   if (action === "heatmap") {
     const grid = Array.from({ length: 7 }, () => Array(24).fill(null).map(() => ({ n: 0, sum: 0 })));
     for (const e of await allEvents()) {
@@ -112,7 +107,7 @@ export default async (req) => {
     return json({ grid: grid.map((row) => row.map((c) => (c.n ? Math.round(c.sum / c.n) : null))) });
   }
 
-  // ---- view (funnel tracking) ----
+  // ---- view tracking (funnel stage 1) ----
   if (action === "view" && req.method === "POST") {
     const evId = url.searchParams.get("id");
     const ev = await store.get(evId, { type: "json" });
@@ -120,7 +115,7 @@ export default async (req) => {
     return json({ ok: true });
   }
 
-  // ---- auth-gated below ----
+  // ---- everything below requires login ----
   const user = await requireUser(req);
   if (!user) return json({ error: "Log in first." }, 401);
 
