@@ -1,44 +1,18 @@
-// /api/tickets - support tickets with two-way Discord relay.
-import { json, ticketsStore, requireUser, id, postDiscordWebhook, auditError } from "../lib/util.js";
+// /api/tickets - support tickets. Website side of the two-way Discord relay.
+//
+// Gate to open a ticket: must be logged in, NOT support-blacklisted, and a member
+// of the Gatherly Discord. Staff replies DM the opener (with Reply/Escalate buttons);
+// the opener's DM replies come back through /api/interactions.
+import {
+  json, ticketsStore, requireUser, id, auditError, guard, clampStr,
+  isStaff, isGuildMember, isSupportBlacklisted, effectivePlan,
+} from "../lib/util.js";
+import {
+  getTicket, saveTicket, allTickets, sortForFeed, SAFE, appendMessage,
+  sendChannelCard, refreshChannelCard, postChannelNote, dmOpened, dmStaffReply, dmResolved,
+} from "../lib/support.js";
 
-const isStaff = (u) => u && (u.role === "admin" || u.role === "executive");
-const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID || "1515235842292187246";
-
-async function fetchT(url, opts = {}, ms = 8000) { return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) }); }
-
-async function allTickets() {
-  const store = ticketsStore();
-  const { blobs } = await store.list();
-  const items = await Promise.all(blobs.map((b) => store.get(b.key, { type: "json" })));
-  return items.filter(Boolean);
-}
-
-const SAFE = (t) => ({ id: t.id, userId: t.userId, username: t.username, topic: t.topic, subject: t.subject, status: t.status, createdAt: t.createdAt, updatedAt: t.updatedAt, messages: t.messages, assignedTo: t.assignedTo || null, assignedToName: t.assignedToName || null });
-
-async function postToSupportChannel(ticket, messageText, fromLabel) {
-  const token = process.env.DISCORD_BOT_TOKEN;
-  if (!token) return { ok: false };
-  try {
-    const embed = { title: `Ticket #${ticket.id.slice(0, 8)} · ${ticket.subject}`, description: messageText.slice(0, 1800), color: 0x7fa8ff,
-      fields: [{ name: "From", value: fromLabel, inline: true }, { name: "Topic", value: ticket.topic, inline: true }, { name: "Status", value: ticket.status, inline: true }, { name: "Ticket ID", value: ticket.id, inline: false }],
-      timestamp: new Date().toISOString(), footer: { text: "Reply from the Gatherly control room. The user receives staff replies as a bot DM." } };
-    const r = await fetchT(`https://discord.com/api/v10/channels/${SUPPORT_CHANNEL_ID}/messages`, { method: "POST", headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ embeds: [embed] }) });
-    return { ok: r.ok };
-  } catch { return { ok: false }; }
-}
-
-async function dmUser(discordId, messageText, subject) {
-  const token = process.env.DISCORD_BOT_TOKEN;
-  if (!token || !discordId) return { ok: false };
-  try {
-    const H = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
-    const ch = await fetchT("https://discord.com/api/v10/users/@me/channels", { method: "POST", headers: H, body: JSON.stringify({ recipient_id: discordId }) });
-    if (!ch.ok) return { ok: false };
-    const { id: channelId } = await ch.json();
-    const r = await fetchT(`https://discord.com/api/v10/channels/${channelId}/messages`, { method: "POST", headers: H, body: JSON.stringify({ embeds: [{ title: `Support reply: ${subject}`, description: messageText.slice(0, 1800), color: 0x7fa8ff, timestamp: new Date().toISOString(), footer: { text: "Gatherly Support · reply at gatherly-events.netlify.app/contact" } }] }) });
-    return { ok: r.ok };
-  } catch { return { ok: false }; }
-}
+const INVITE = process.env.GATHERLY_INVITE || "https://discord.gg/x3Fv8JSenY";
 
 export default async (req) => {
   try { return await handler(req); }
@@ -48,28 +22,43 @@ export default async (req) => {
 async function handler(req) {
   const url = new URL(req.url);
   const action = url.searchParams.get("action");
-  const store = ticketsStore();
 
   const user = await requireUser(req);
   if (!user) return json({ error: "Log in to use support." }, 401);
 
+  // Lets the support page decide whether to show the form, the join prompt,
+  // or the blacklist screen. Never trusted on its own; create re-checks.
+  if (action === "precheck") {
+    const member = await isGuildMember(user.discordId); // true / false / null(unknown)
+    return json({ blacklisted: isSupportBlacklisted(user), member, invite: INVITE });
+  }
+
   if (action === "create" && req.method === "POST") {
+    if (isSupportBlacklisted(user)) return json({ error: "You have been blacklisted from opening a support ticket.", blacklisted: true }, 403);
+
+    const member = await isGuildMember(user.discordId);
+    if (member === false) return json({ error: `Join the Gatherly Discord before opening a ticket: ${INVITE}`, needJoin: true, invite: INVITE }, 403);
+
+    const blocked = await guard(req, user, `ticket-create:${user.id}`, 3, 600, { kind: "ticket-spam", what: "Rapid ticket creation.", risk: "Possible spamming of the support queue." });
+    if (blocked) return blocked;
+
     const b = await req.json().catch(() => ({}));
-    if (b.website) return json({ ok: true });
+    if (b.website) return json({ ok: true }); // honeypot
     if (!b.topic || !b.subject || !b.message) return json({ error: "Topic, subject, and message are all required." }, 400);
+
     const t = {
       id: id(), userId: user.id, username: user.username, discordId: user.discordId,
-      topic: String(b.topic).slice(0, 40), subject: String(b.subject).slice(0, 100), status: "open",
-      assignedTo: null, assignedToName: null,
-      messages: [{ from: "user", by: user.username, text: String(b.message).slice(0, 2000), at: new Date().toISOString() }],
+      topic: clampStr(b.topic, 40), subject: clampStr(b.subject, 100),
+      status: "open", escalated: false, plan: effectivePlan(user),
+      assignedTo: null, assignedToName: null, channelMessageId: null, channelId: null,
+      messages: [{ from: "user", text: clampStr(b.message, 2000), at: new Date().toISOString() }],
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
-    await store.setJSON(t.id, t);
-    const posted = await postToSupportChannel(t, t.messages[0].text, `@${user.username}`);
-    if (!posted.ok && process.env.STAFF_DISCORD_WEBHOOK) {
-      await postDiscordWebhook(process.env.STAFF_DISCORD_WEBHOOK, { username: "Gatherly Support", embeds: [{ title: `New ticket: ${t.subject}`, description: t.messages[0].text.slice(0, 500), color: 0x7fa8ff, fields: [{ name: "From", value: `@${t.username}`, inline: true }, { name: "Topic", value: t.topic, inline: true }, { name: "ID", value: t.id, inline: true }], timestamp: t.createdAt }] });
-    }
-    return json({ ok: true, ticket: SAFE(t), delivered: posted.ok });
+    const card = await sendChannelCard(t);
+    if (card.ok) { t.channelMessageId = card.messageId; t.channelId = card.channelId; }
+    await saveTicket(t);
+    const dm = await dmOpened(t);
+    return json({ ok: true, ticket: SAFE(t), delivered: card.ok, dmDelivered: dm.ok });
   }
 
   if (action === "mine") {
@@ -78,67 +67,97 @@ async function handler(req) {
   }
 
   if (action === "get") {
-    const t = await store.get(url.searchParams.get("id"), { type: "json" });
+    const t = await getTicket(url.searchParams.get("id"));
     if (!t) return json({ error: "Ticket not found." }, 404);
     if (t.userId !== user.id && !isStaff(user)) return json({ error: "Not found." }, 404);
     return json({ ticket: SAFE(t) });
   }
 
   if (action === "reply" && req.method === "POST") {
+    const blocked = await guard(req, user, `ticket-reply:${user.id}`, 12, 120, { kind: "ticket-spam", what: "Rapid ticket replies.", risk: "Possible flooding of a support thread." });
+    if (blocked) return blocked;
     const b = await req.json().catch(() => ({}));
     const ticketId = b.id || url.searchParams.get("id");
-    const text = String(b.message || "").slice(0, 2000);
+    const text = clampStr(b.message, 2000);
     if (!text) return json({ error: "Message is required." }, 400);
-    const t = await store.get(ticketId, { type: "json" });
+    const t = await getTicket(ticketId);
+    if (!t) return json({ error: "Ticket not found." }, 404);
+    const staff = isStaff(user);
+    if (t.userId !== user.id && !staff) return json({ error: "Not found." }, 404);
+    if (t.status === "closed" && !staff) return json({ error: "This ticket is closed." }, 400);
+
+    appendMessage(t, staff ? "staff" : "user", text);
+    await saveTicket(t);
+    if (staff) {
+      await dmStaffReply(t, text);                 // no staff name, no URL
+      await postChannelNote(t, `> Staff reply sent to the user.`);
+    } else {
+      await postChannelNote(t, `> New reply from the user:\n${text.slice(0, 800)}`);
+      await refreshChannelCard(t);
+    }
+    return json({ ok: true, ticket: SAFE(t) });
+  }
+
+  if (action === "escalate" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const t = await getTicket(b.id || url.searchParams.get("id"));
     if (!t) return json({ error: "Ticket not found." }, 404);
     if (t.userId !== user.id && !isStaff(user)) return json({ error: "Not found." }, 404);
-    if (t.status === "closed" && !isStaff(user)) return json({ error: "This ticket is closed." }, 400);
-    const fromStaff = isStaff(user);
-    t.messages.push({ from: fromStaff ? "staff" : "user", by: user.username, text, at: new Date().toISOString() });
-    t.updatedAt = new Date().toISOString();
-    await store.setJSON(ticketId, t);
-    if (fromStaff) {
-      if (t.discordId) await dmUser(t.discordId, `${user.username} (Gatherly Staff): ${text}`, t.subject);
-      await postToSupportChannel(t, `Staff reply from ${user.username}: ${text}`, `@${user.username}`);
-    } else {
-      await postToSupportChannel(t, `User reply from ${user.username}: ${text}`, `@${user.username}`);
-    }
+    t.escalated = true; t.escalatedAt = new Date().toISOString(); t.updatedAt = t.escalatedAt;
+    await saveTicket(t);
+    await postChannelNote(t, "> This ticket was marked **high urgency**.");
+    await refreshChannelCard(t);
+    return json({ ok: true, ticket: SAFE(t) });
+  }
+
+  // ---- staff only below ----
+  if (action === "assign" && req.method === "POST") {
+    if (!isStaff(user)) return json({ error: "Staff only." }, 403);
+    const b = await req.json().catch(() => ({}));
+    const t = await getTicket(b.id);
+    if (!t) return json({ error: "Not found." }, 404);
+    t.assignedTo = user.id; t.assignedToName = user.username; t.updatedAt = new Date().toISOString();
+    await saveTicket(t);
+    await refreshChannelCard(t);
+    return json({ ok: true, ticket: SAFE(t) });
+  }
+
+  if (action === "unassign" && req.method === "POST") {
+    if (!isStaff(user)) return json({ error: "Staff only." }, 403);
+    const b = await req.json().catch(() => ({}));
+    const t = await getTicket(b.id);
+    if (!t) return json({ error: "Not found." }, 404);
+    t.assignedTo = null; t.assignedToName = null; t.updatedAt = new Date().toISOString();
+    await saveTicket(t);
+    await refreshChannelCard(t);
     return json({ ok: true, ticket: SAFE(t) });
   }
 
   if ((action === "close" || action === "reopen") && req.method === "POST") {
     if (!isStaff(user)) return json({ error: "Staff only." }, 403);
     const b = await req.json().catch(() => ({}));
-    const t = await store.get(b.id, { type: "json" });
+    const t = await getTicket(b.id);
     if (!t) return json({ error: "Ticket not found." }, 404);
     t.status = action === "close" ? "closed" : "open";
+    if (action === "reopen") t.escalated = false;
     t.updatedAt = new Date().toISOString();
-    await store.setJSON(t.id, t);
-    if (action === "close" && t.discordId) await dmUser(t.discordId, `Your ticket "${t.subject}" has been resolved and closed. Open a new ticket any time at gatherly-events.netlify.app/contact`, t.subject);
+    await saveTicket(t);
+    await refreshChannelCard(t);
+    if (action === "close") await dmResolved(t);
     return json({ ok: true, ticket: SAFE(t) });
-  }
-
-  if (action === "assign" && req.method === "POST") {
-    if (!isStaff(user)) return json({ error: "Staff only." }, 403);
-    const b = await req.json().catch(() => ({}));
-    const t = await store.get(b.id, { type: "json" });
-    if (!t) return json({ error: "Not found." }, 404);
-    t.assignedTo = user.id; t.assignedToName = user.username; t.updatedAt = new Date().toISOString();
-    await store.setJSON(t.id, t);
-    return json({ ok: true });
   }
 
   if (action === "list") {
     if (!isStaff(user)) return json({ error: "Staff only." }, 403);
     const status = url.searchParams.get("status") || "open";
-    const items = (await allTickets()).filter((t) => t.status === status).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const items = sortForFeed((await allTickets()).filter((t) => t.status === status));
     return json({ tickets: items.map(SAFE) });
   }
 
   if (action === "counts") {
     if (!isStaff(user)) return json({ open: 0, closed: 0 });
     const items = await allTickets();
-    return json({ open: items.filter((t) => t.status === "open").length, closed: items.filter((t) => t.status === "closed").length });
+    return json({ open: items.filter((t) => t.status === "open").length, closed: items.filter((t) => t.status === "closed").length, escalated: items.filter((t) => t.status === "open" && t.escalated).length });
   }
 
   return json({ error: "Unknown action." }, 404);
