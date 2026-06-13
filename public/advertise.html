@@ -64,7 +64,7 @@
 
     <label class="field">Private server join code
       <input id="joinCode" maxlength="32" placeholder="A4F2K9" autocomplete="off">
-      <small>Hidden until 15 minutes before start, then revealed to players in one click.</small>
+      <small>Revealed to players in one click while the event is live.</small>
     </label>
 
     <label class="field">Banner <small>Exactly 1200x480px, under 2MB. JPG, PNG, or WebP.</small></label>
@@ -73,14 +73,15 @@
       <input type="file" id="dzInput" accept="image/jpeg,image/png,image/webp" hidden>
     </div>
 
-    <label class="field" style="margin-top:18px">Also send the report to <small>Optional. A Discord user ID - the Gatherly bot DMs them the report alongside you. They must share a server with the bot and allow DMs.</small>
+    <label class="field" style="margin-top:18px">Also send the report to <small>Optional. A Discord user ID - the Gatherly bot DMs them the report alongside you.</small>
       <input id="reportRecipientId" maxlength="32" placeholder="123456789012345678" inputmode="numeric" autocomplete="off">
     </label>
 
-    <!-- honeypot: bots fill this, people never see it -->
+    <div id="boostRow" style="margin:8px 0 4px"></div>
+
     <input class="hp" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
 
-    <button class="btn btn-primary" id="publish" style="margin-top:8px">Publish listing</button>
+    <button class="btn btn-primary" id="publish" style="margin-top:12px">Publish listing</button>
   </div>
 </section>
 
