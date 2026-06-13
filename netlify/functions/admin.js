@@ -1,8 +1,9 @@
-// /api/admin - control room: users, credits, plans, roles, events,
-// announcements (cycling banners), notifications (dismissable toast), audit, codes.
+// /api/admin - control panel: users, credits, plans, roles, support blacklist,
+// events, announcements, notifications, audit + watchdog feed, access codes.
 import {
   json, requireUser, isStaff, isExec, usersStore, eventsStore, miscStore,
-  auditStore, codesStore, audit, clampStr, adminCode, normalizePlan, PLAN_INFO,
+  auditStore, codesStore, audit, clampStr, adminCode, execCode, normalizePlan, PLAN_INFO,
+  guard, flagWatchdog, addGuildRole, removeGuildRole, monthKey,
 } from "../lib/util.js";
 
 export default async (req) => {
@@ -22,16 +23,28 @@ async function handler(req) {
     return json({ content: { ...content, announcements, notifications } });
   }
 
+  // ---- Redeem an access code (any logged-in user). Brute-force protected. ----
   if (action === "redeem-code" && req.method === "POST") {
     const user = await requireUser(req);
     if (!user) return json({ error: "Log in first." }, 401);
+    // 5 attempts per hour per user. A trip is flagged to the watchdog.
+    const blocked = await guard(req, user, `redeem:${user.id}`, 5, 3600, {
+      kind: "code-bruteforce",
+      what: "Repeated access-code redemption attempts.",
+      risk: "Possible attempt to guess an admin or executive access code.",
+    });
+    if (blocked) return blocked;
+
     const b = await req.json().catch(() => ({}));
-    const codeStr = clampStr(b.code, 40).toUpperCase();
+    const codeStr = clampStr(b.code, 60).toUpperCase();
     if (!codeStr) return json({ error: "Enter your access code." }, 400);
     const store = codesStore();
     const rec = await store.get(codeStr, { type: "json" });
-    if (!rec || rec.revoked) { await audit(user, "code.redeem-failed", { code: codeStr }); return json({ error: "That code is not valid or has been revoked." }, 403); }
-    const grant = "admin";
+    if (!rec || rec.revoked) {
+      await audit(user, "code.redeem-failed", { code: codeStr });
+      return json({ error: "That code is not valid or has been revoked." }, 403);
+    }
+    const grant = rec.role === "executive" ? "executive" : "admin";
     await usersStore().setJSON(user.id, { ...user, role: grant, updatedAt: new Date().toISOString() });
     rec.redemptions = rec.redemptions || [];
     rec.redemptions.push({ userId: user.id, username: user.username, at: new Date().toISOString() });
@@ -41,13 +54,19 @@ async function handler(req) {
     return json({ ok: true, role: grant });
   }
 
+  // ---- First-run executive claim via EXEC_SETUP_CODE. Not rate limited (so the
+  //      legitimate owner is never locked out) but failures are flagged. ----
   if (action === "claim-exec" && req.method === "POST") {
     const user = await requireUser(req);
     if (!user) return json({ error: "Log in first." }, 401);
     const setup = process.env.EXEC_SETUP_CODE;
     if (!setup) return json({ error: "Executive setup is not enabled on this site." }, 400);
     const b = await req.json().catch(() => ({}));
-    if (clampStr(b.code, 200) !== setup) { await audit(user, "exec.claim-failed", {}); return json({ error: "That setup code is not correct." }, 403); }
+    if (clampStr(b.code, 200) !== setup) {
+      await audit(user, "exec.claim-failed", {});
+      await flagWatchdog(user, req, "exec-claim-failed", { what: "Failed executive setup-code attempt.", risk: "Possible attempt to seize executive control." });
+      return json({ error: "That setup code is not correct." }, 403);
+    }
     await usersStore().setJSON(user.id, { ...user, role: "executive", updatedAt: new Date().toISOString() });
     await audit({ ...user, role: "executive" }, "exec.claim-success", {});
     return json({ ok: true, role: "executive" });
@@ -66,14 +85,14 @@ async function handler(req) {
     const all = await Promise.all(blobs.map((b) => uStore.get(b.key, { type: "json" })));
     let users = all.filter(Boolean);
     if (q) users = users.filter((u) => (u.username?.toLowerCase().includes(q) || u.id?.toLowerCase().includes(q) || u.discordId?.toLowerCase().includes(q)));
-    users = users.slice(0, 50).map((u) => ({ id: u.id, username: u.username, plan: normalizePlan(u.plan), role: u.role || null, credits: u.credits ?? 0, suspended: Boolean(u.suspended), createdAt: u.createdAt, discordId: u.discordId, avatar: u.avatar || null }));
+    users = users.slice(0, 50).map((u) => ({ id: u.id, username: u.username, plan: normalizePlan(u.plan), role: u.role || null, credits: u.credits ?? 0, suspended: Boolean(u.suspended), supportBlacklisted: Boolean(u.supportBlacklist?.active), createdAt: u.createdAt, discordId: u.discordId, avatar: u.avatar || null }));
     return json({ users });
   }
 
   if (action === "user-get") {
     const u = await uStore.get(url.searchParams.get("id"), { type: "json" });
     if (!u) return json({ error: "User not found." }, 404);
-    return json({ user: { id: u.id, username: u.username, plan: normalizePlan(u.plan), role: u.role || null, credits: u.credits ?? 0, suspended: Boolean(u.suspended), discordId: u.discordId, avatar: u.avatar || null } });
+    return json({ user: { id: u.id, username: u.username, plan: normalizePlan(u.plan), role: u.role || null, credits: u.credits ?? 0, suspended: Boolean(u.suspended), supportBlacklisted: Boolean(u.supportBlacklist?.active), blacklistReason: u.supportBlacklist?.reason || null, discordId: u.discordId, avatar: u.avatar || null } });
   }
 
   if ((action === "credits-add" || action === "credits-remove" || action === "credits-set") && req.method === "POST") {
@@ -96,9 +115,14 @@ async function handler(req) {
     const target = await uStore.get(b.userId, { type: "json" });
     if (!target) return json({ error: "User not found." }, 404);
     const plan = normalizePlan(b.plan);
-    const grant = PLAN_INFO[plan].weeklyCredits;
-    await uStore.setJSON(b.userId, { ...target, plan, planVia: "admin", planSetAt: new Date().toISOString(), credits: (target.credits ?? 0) + grant, updatedAt: new Date().toISOString() });
-    await audit(user, "user.set-plan", { targetId: b.userId, plan, creditsGranted: grant });
+    const grant = PLAN_INFO[plan].monthlyCredits;
+    await uStore.setJSON(b.userId, {
+      ...target, plan, planVia: "admin", planCycle: plan === "free" ? null : "monthly",
+      subStatus: plan === "free" ? "none" : "active", planExpiresAt: null,
+      planSetAt: new Date().toISOString(), credits: plan === "free" ? (target.credits ?? 0) : grant,
+      creditsPeriod: monthKey(), updatedAt: new Date().toISOString(),
+    });
+    await audit(user, "user.set-plan", { targetId: b.userId, plan, creditsGranted: plan === "free" ? 0 : grant });
     return json({ ok: true, plan });
   }
 
@@ -120,6 +144,29 @@ async function handler(req) {
     await uStore.setJSON(b.userId, { ...target, suspended: Boolean(b.suspended), suspendReason: clampStr(b.reason, 200) || null, updatedAt: new Date().toISOString() });
     await audit(user, b.suspended ? "user.suspend" : "user.unsuspend", { targetId: b.userId, reason: b.reason });
     return json({ ok: true, suspended: Boolean(b.suspended) });
+  }
+
+  // ---- Support blacklist: blocks the website support form AND roles them in Discord ----
+  if (action === "blacklist-add" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const target = await uStore.get(b.userId, { type: "json" });
+    if (!target) return json({ error: "User not found." }, 404);
+    const reason = clampStr(b.reason, 200) || "No reason provided.";
+    await uStore.setJSON(b.userId, { ...target, supportBlacklist: { active: true, reason, by: user.username, at: new Date().toISOString() }, updatedAt: new Date().toISOString() });
+    const roled = target.discordId ? await addGuildRole(target.discordId) : false;
+    await audit(user, "support.blacklist-add", { targetId: b.userId, reason, discordRoleApplied: roled });
+    return json({ ok: true, discordRoleApplied: roled });
+  }
+
+  if (action === "blacklist-remove" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const target = await uStore.get(b.userId, { type: "json" });
+    if (!target) return json({ error: "User not found." }, 404);
+    const { supportBlacklist: _drop, ...rest } = target;
+    await uStore.setJSON(b.userId, { ...rest, updatedAt: new Date().toISOString() });
+    const unroled = target.discordId ? await removeGuildRole(target.discordId) : false;
+    await audit(user, "support.blacklist-remove", { targetId: b.userId, discordRoleRemoved: unroled });
+    return json({ ok: true, discordRoleRemoved: unroled });
   }
 
   if (action === "wipe-listings" && req.method === "POST") {
@@ -172,7 +219,7 @@ async function handler(req) {
     const content = (await miscStore().get("siteContent", { type: "json" })) || {};
     content.announcements = content.announcements || [];
     const mins = parseInt(b.durationMin, 10);
-    content.announcements.push({ id: adminCode().slice(5), text, link: clampStr(b.link, 300) || null, expiresAt: Number.isFinite(mins) && mins > 0 ? new Date(Date.now() + mins * 60000).toISOString() : null, by: user.username, at: new Date().toISOString() });
+    content.announcements.push({ id: adminCode().slice(5, 13), text, link: clampStr(b.link, 300) || null, expiresAt: Number.isFinite(mins) && mins > 0 ? new Date(Date.now() + mins * 60000).toISOString() : null, by: user.username, at: new Date().toISOString() });
     await miscStore().setJSON("siteContent", content);
     await audit(user, "announce.add", { text });
     return json({ ok: true, announcements: content.announcements });
@@ -199,7 +246,7 @@ async function handler(req) {
     const content = (await miscStore().get("siteContent", { type: "json" })) || {};
     content.notifications = content.notifications || [];
     const mins = parseInt(b.durationMin, 10);
-    content.notifications.push({ id: adminCode().slice(5), title, body, link: clampStr(b.link, 300) || null, expiresAt: Number.isFinite(mins) && mins > 0 ? new Date(Date.now() + mins * 60000).toISOString() : null, by: user.username, at: new Date().toISOString() });
+    content.notifications.push({ id: adminCode().slice(5, 13), title, body, link: clampStr(b.link, 300) || null, expiresAt: Number.isFinite(mins) && mins > 0 ? new Date(Date.now() + mins * 60000).toISOString() : null, by: user.username, at: new Date().toISOString() });
     await miscStore().setJSON("siteContent", content);
     await audit(user, "notify.add", { title });
     return json({ ok: true, notifications: content.notifications });
@@ -225,11 +272,12 @@ async function handler(req) {
     return json({ ok: true });
   }
 
+  // ---- Access codes. Generation/revocation is executive-only and NOT rate limited. ----
   if (action === "gen-code" && req.method === "POST") {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
     const b = await req.json().catch(() => ({}));
-    const code = adminCode();
     const role = b.role === "executive" ? "executive" : "admin";
+    const code = role === "executive" ? execCode() : adminCode();
     await codesStore().setJSON(code, { code, role, createdBy: user.id, createdAt: new Date().toISOString(), revoked: false, redemptions: [] });
     await audit(user, "code.generate", { code, role });
     return json({ ok: true, code });
@@ -252,9 +300,10 @@ async function handler(req) {
     return json({ codes: codes.filter(Boolean) });
   }
 
-  if (action === "audit") {
+  if (action === "audit" || action === "flagged") {
     const { blobs } = await auditStore().list();
-    const entries = (await Promise.all(blobs.map((b) => auditStore().get(b.key, { type: "json" })))).filter(Boolean);
+    let entries = (await Promise.all(blobs.map((b) => auditStore().get(b.key, { type: "json" })))).filter(Boolean);
+    if (action === "flagged") entries = entries.filter((e) => e.level === "warn" || e.detail?.watchdog);
     return json({ entries: entries.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 200) });
   }
 
