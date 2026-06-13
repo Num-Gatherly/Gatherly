@@ -50,10 +50,23 @@ export function renderNav(active = "") {
       a.href = "/dashboard";
       if (d.user.role) {
         const adm = document.createElement("a");
-        adm.href = "/admin"; adm.textContent = "Admin";
+        adm.href = "/admin"; adm.textContent = "Control room";
         el.querySelector("#navLinks").insertBefore(adm, a);
       }
     }
+  }).catch(() => {});
+}
+
+// ---------- site-wide announcement (set by executives) ----------
+export function renderAnnouncement() {
+  api("/api/admin?action=content").then((d) => {
+    const text = d?.content?.announcement;
+    if (!text) return;
+    const bar = document.createElement("div");
+    bar.className = "announce-bar";
+    bar.innerHTML = `<div class="wrap">${esc(text)}</div>`;
+    const nav = document.getElementById("nav");
+    nav?.parentNode?.insertBefore(bar, nav.nextSibling);
   }).catch(() => {});
 }
 
@@ -151,6 +164,7 @@ export function renderFooter() {
 // ---------- boot ----------
 export function boot(active) {
   renderNav(active);
+  renderAnnouncement();
   renderFooter();
   initReveal();
   tickCountdowns();
