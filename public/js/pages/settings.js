@@ -1,82 +1,117 @@
-  import { boot, api, esc } from "/js/app.js";
-  boot("/settings");
+// /js/pages/settings.js
+import { boot, api, esc } from "/js/app.js";
 
-  const $ = (id) => document.getElementById(id);
-  const say = (t, ok = false) => { $("msg").innerHTML = `<div class="alert ${ok ? "alert-ok" : "alert-err"}">${esc(t)}</div>`; window.scrollTo({ top: 0, behavior: "smooth" }); };
+boot("/settings");
 
-  let me = null;
+const $ = (id) => document.getElementById(id);
+const flash = (el, text, ok = false) => {
+  el.innerHTML = `<div class="notice ${ok ? "ok" : "err"}">${esc(text)}</div>`;
+  if (ok) setTimeout(() => { if (el.firstChild) el.innerHTML = ""; }, 3500);
+};
+
+let me = null;
+init();
+async function init() {
   try {
-    me = (await api("/api/auth?action=me")).user;
-    if (me.hasErlcKey) $("erlcKey").placeholder = "A key is saved (hidden). Paste a new one to replace it.";
-    if (me.hasWebhook) $("webhook").placeholder = "A webhook is saved (hidden). Paste a new one to replace it.";
-    $("dmOptIn").checked = Boolean(me.dmOptIn);
-  } catch {
-    $("gate").hidden = false;
-    document.querySelectorAll(".card:not(#gate)").forEach((c) => c.hidden = true);
+    const d = await api("/api/auth?action=me");
+    me = d.user;
+  } catch { me = null; }
+  if (!me) { $("gate").hidden = false; return; }
+  renderStaffStatus();
+  loadDelivery();
+}
+
+// ---------------- Staff access (new) ----------------
+function renderStaffStatus() {
+  const status = $("staffStatus");
+  if (me.role === "executive" || me.role === "admin") {
+    status.innerHTML = `<div class="notice ok">You have ${esc(me.role)} access.
+      <a href="/admin" style="margin-left:6px"><b>Open the control room →</b></a></div>`;
+  } else {
+    status.innerHTML = "";
   }
+}
+const staffCode = () => $("staffCode").value.trim();
+$("redeemStaff").onclick = async () => {
+  const sm = $("staffMsg");
+  if (!staffCode()) return flash(sm, "Enter your access code first.");
+  try {
+    const d = await api("/api/admin?action=redeem-code", { method: "POST", body: { code: staffCode() } });
+    flash(sm, `Access granted: ${d.role}. Redirecting to the control room…`, true);
+    setTimeout(() => location.href = "/admin", 900);
+  } catch (e) { flash(sm, e.message); }
+};
+$("claimExecStaff").onclick = async () => {
+  const sm = $("staffMsg");
+  if (!staffCode()) return flash(sm, "Enter the executive setup code first.");
+  try {
+    const d = await api("/api/admin?action=claim-exec", { method: "POST", body: { code: staffCode() } });
+    flash(sm, `You are now ${d.role}. Redirecting…`, true);
+    setTimeout(() => location.href = "/admin", 900);
+  } catch (e) { flash(sm, e.message); }
+};
 
-  $("saveKey").onclick = async () => {
-    const k = $("erlcKey").value.trim();
-    if (!k) return say("Paste a key first.");
-    try { await api("/api/auth?action=connection", { method: "POST", body: { erlcKey: k } }); $("erlcKey").value = ""; say("API key saved and encrypted.", true); }
-    catch (e) { say(e.message); }
-  };
+// ---------------- ER:LC key ----------------
+$("saveKey").onclick = async () => {
+  const key = $("erlcKey").value.trim();
+  if (!key) return flash($("keyStatus"), "Paste your server key first.");
+  try {
+    await api("/api/erlc?action=save-key", { method: "POST", body: { key } });
+    $("erlcKey").value = "";
+    flash($("keyStatus"), "Key saved and encrypted.", true);
+  } catch (e) { flash($("keyStatus"), e.message); }
+};
+$("testKey").onclick = async () => {
+  flash($("keyStatus"), "Testing…", true);
+  try {
+    const d = await api("/api/erlc?action=test-key");
+    flash($("keyStatus"), d.ok ? `Connected to ${d.serverName || "your server"}.` : (d.error || "Connection failed."), Boolean(d.ok));
+  } catch (e) { flash($("keyStatus"), e.message); }
+};
+$("removeKey").onclick = async () => {
+  if (!confirm("Remove your stored ER:LC key?")) return;
+  try { await api("/api/erlc?action=remove-key", { method: "POST" }); flash($("keyStatus"), "Key removed.", true); }
+  catch (e) { flash($("keyStatus"), e.message); }
+};
 
-  $("testKey").onclick = async () => {
-    $("keyStatus").innerHTML = `<div class="alert">Testing…</div>`;
-    try {
-      const d = await api("/api/erlc?action=test", { method: "POST", body: { erlcKey: $("erlcKey").value.trim() } });
-      $("keyStatus").innerHTML = `<div class="alert alert-ok">Connected to ${esc(d.serverName)} - ${d.players}/${d.maxPlayers} players online.</div>`;
-    } catch (e) {
-      $("keyStatus").innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`;
-    }
-  };
+// ---------------- Delivery ----------------
+async function loadDelivery() {
+  try {
+    const d = await api("/api/erlc?action=delivery");
+    if (d.webhook) $("webhook").value = d.webhook;
+    $("dmOptIn").checked = Boolean(d.dmOptIn);
+  } catch { /* not configured yet — fine */ }
+}
+$("saveDelivery").onclick = async () => {
+  try {
+    await api("/api/erlc?action=save-delivery", { method: "POST", body: { webhook: $("webhook").value.trim(), dmOptIn: $("dmOptIn").checked } });
+    flash($("msg"), "Delivery settings saved.", true);
+  } catch (e) { flash($("msg"), e.message); }
+};
+$("removeWebhook").onclick = async () => {
+  try { await api("/api/erlc?action=save-delivery", { method: "POST", body: { webhook: "", dmOptIn: $("dmOptIn").checked } }); $("webhook").value = ""; flash($("msg"), "Webhook removed.", true); }
+  catch (e) { flash($("msg"), e.message); }
+};
 
-  $("removeKey").onclick = async () => {
-    try { await api("/api/auth?action=disconnect", { method: "POST", body: { erlcKey: true } }); say("API key removed.", true); }
-    catch (e) { say(e.message); }
-  };
+// ---------------- Diagnostics ----------------
+$("runDiag").onclick = async () => {
+  const out = $("diagOut");
+  out.innerHTML = `<p class="note">Running…</p>`;
+  try {
+    const d = await api("/api/erlc?action=diagnostics");
+    const rows = Object.entries(d.checks || {}).map(([k, v]) =>
+      `<div class="row"><span>${esc(k)}</span><b style="color:${v.ok ? "var(--good)" : "var(--bad)"}">${v.ok ? "OK" : esc(v.detail || "failed")}</b></div>`);
+    out.innerHTML = `<div class="mock">${rows.join("") || `<p class="note">No checks returned.</p>`}</div>`;
+  } catch (e) { out.innerHTML = `<p class="note">${esc(e.message)}</p>`; }
+};
 
-  $("saveDelivery").onclick = async () => {
-    try {
-      await api("/api/auth?action=connection", { method: "POST", body: { discordWebhook: $("webhook").value.trim(), dmOptIn: $("dmOptIn").checked } });
-      say("Delivery settings saved.", true);
-    } catch (e) { say(e.message); }
-  };
-
-  $("removeWebhook").onclick = async () => {
-    try { await api("/api/auth?action=disconnect", { method: "POST", body: { discordWebhook: true } }); $("webhook").value = ""; say("Webhook removed.", true); }
-    catch (e) { say(e.message); }
-  };
-
-  $("runDiag").onclick = async () => {
-    $("diagOut").innerHTML = `<div class="alert">Running checks…</div>`;
-    try {
-      const d = await api("/api/erlc?action=diag");
-      const rows = [
-        ["Logged in", d.checks.loggedIn],
-        ["ER:LC key saved", d.checks.keySaved],
-        ["Key decrypts correctly", d.checks.keyDecrypts],
-        ["PRC API reachable with your key", d.prcReachable],
-        ["Discord webhook saved", d.checks.webhookSaved],
-        ["Bot DMs opted in", d.checks.dmOptIn],
-        ["Gatherly bot configured", d.checks.botConfigured],
-        ["AI summaries configured", d.checks.aiConfigured],
-      ];
-      $("diagOut").innerHTML = `
-        <table class="tbl"><tbody>
-          ${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v ? `<span class="badge badge-good">OK</span>` : `<span class="badge badge-bad">No</span>`}</td></tr>`).join("")}
-        </tbody></table>
-        ${d.prcMessage ? `<p class="note" style="margin-top:12px">${esc(d.prcMessage)}</p>` : ""}`;
-    } catch (e) {
-      $("diagOut").innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`;
-    }
-  };
-
-  $("logout").onclick = async () => { await api("/api/auth?action=logout", { method: "POST" }).catch(() => {}); location.href = "/"; };
-
-  $("deleteAccount").onclick = async () => {
-    if (!confirm("Delete your account, your encrypted key, and every event you have listed? This cannot be undone.")) return;
-    try { await api("/api/auth?action=delete-account", { method: "POST" }); location.href = "/"; }
-    catch (e) { say(e.message); }
-  };
+// ---------------- Account ----------------
+$("logout").onclick = async () => {
+  try { await api("/api/auth?action=logout", { method: "POST" }); } catch {}
+  location.href = "/";
+};
+$("deleteAccount").onclick = async () => {
+  if (!confirm("Permanently delete your account, your encrypted key, and all your events? This cannot be undone.")) return;
+  try { await api("/api/erlc?action=delete-account", { method: "POST" }); location.href = "/"; }
+  catch (e) { flash($("msg"), e.message); }
+};
