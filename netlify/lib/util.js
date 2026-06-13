@@ -18,7 +18,7 @@ export const miscStore = () => getStore("misc");
 export const imagesStore = () => getStore("images");
 export const ticketsStore = () => getStore("tickets");
 export const auditStore = () => getStore("audit");
-export const codesStore = () => getStore("adminCodes"); // NEW: executive-issued role codes
+export const codesStore = () => getStore("adminCodes");
 
 // ---------- secrets ----------
 function secret() {
@@ -63,12 +63,10 @@ export async function requireUser(req) {
 }
 
 // ---------- role helpers ----------
-// Staff = admin OR executive (moderation surface).
 export const isStaff = (u) => Boolean(u && (u.role === "admin" || u.role === "executive"));
-// Exec = executive only (ultimate power: roles, codes, site-critical settings).
 export const isExec = (u) => Boolean(u && u.role === "executive");
 
-// ---------- encryption for stored ER:LC keys (AES-256-GCM) ----------
+// ---------- encryption (AES-256-GCM) ----------
 function encKey() {
   return crypto.scryptSync(secret(), "gatherly-erlc-key", 32);
 }
@@ -87,13 +85,12 @@ export function decrypt(blob) {
   return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
 }
 
-// ---------- rate limiting (coarse, blob-backed) ----------
-// Allows `limit` hits per `windowSec` for a given bucket key (e.g. "create:<userId>").
+// ---------- rate limiting ----------
 export async function rateLimit(bucket, limit, windowSec) {
   const store = miscStore();
   const key = `rl_${bucket}`;
   const now = Date.now();
-  const rec = (await store.get(key, { type: "json" })) || { hits: [], };
+  const rec = (await store.get(key, { type: "json" })) || { hits: [] };
   rec.hits = rec.hits.filter((t) => now - t < windowSec * 1000);
   if (rec.hits.length >= limit) return false;
   rec.hits.push(now);
@@ -115,14 +112,13 @@ export async function audit(actor, action, detail = {}) {
       action,
       detail,
     });
-  } catch { /* never block the action on audit failure */ }
+  } catch { }
 }
 
 // ---------- input helpers ----------
 export const clampStr = (v, max) => String(v ?? "").trim().slice(0, max);
 export const id = () => crypto.randomBytes(9).toString("base64url");
 
-// Short, human-typeable, unambiguous code (no 0/O/1/I/L). e.g. "GATH-7K4P-9XQ2"
 export function adminCode() {
   const alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
   const block = () => Array.from({ length: 4 }, () =>
