@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://api.fontshare.com">
   <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600&f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/admin-additions.css">
 </head>
 <body>
 <nav id="nav"></nav>
@@ -56,6 +57,21 @@
       <button class="btn btn-primary btn-sm" id="saveDelivery">Save delivery settings</button>
       <button class="btn btn-ghost btn-sm" id="removeWebhook">Remove webhook</button>
     </div>
+  </div>
+
+  <!-- NEW: Staff access -->
+  <div class="card" id="staffCard">
+    <h3>Staff access</h3>
+    <div id="staffStatus"></div>
+    <p style="font-size:.88rem;margin:6px 0 14px">Have an access code from an executive? Enter it to unlock the staff control room. Executives can also enter the one-time setup code here to claim the executive role.</p>
+    <label class="field">Access code
+      <input id="staffCode" autocomplete="off" placeholder="GATH-XXXX-XXXX">
+    </label>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" id="redeemStaff">Unlock staff access</button>
+      <button class="btn btn-ghost btn-sm" id="claimExecStaff">Use as executive setup code</button>
+    </div>
+    <div id="staffMsg" style="margin-top:12px"></div>
   </div>
 
   <div class="card">
