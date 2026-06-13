@@ -12,18 +12,27 @@
 <body>
 <nav id="nav"></nav>
 
-<header class="section" style="padding-bottom:36px">
+<header class="section" style="padding-bottom:8px">
   <div class="wrap">
-    <span class="kicker">Discovery</span>
+    <span class="kicker">Discover</span>
     <h1 style="font-size:clamp(2rem,4vw,3rem)">Live and upcoming events</h1>
-    <p style="margin-top:10px;max-width:560px">Every listing shows in your local timezone. Join codes unlock 15 minutes before start, and listings leave the feed the moment an event ends.</p>
+    <p style="margin-top:10px;max-width:560px">Boosted events sit up top with a red highlight. Search by name, host, or scenario, or filter the feed.</p>
+
+    <div class="discover-controls">
+      <input class="discover-search" id="searchInput" placeholder="Search events, hosts, scenarios&hellip;" autocomplete="off">
+      <div class="filter-chips">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="live">Live now</button>
+        <button class="chip" data-filter="upcoming">Upcoming</button>
+        <button class="chip" data-filter="boosted">Boosted</button>
+        <button class="chip" data-filter="members">Most players</button>
+      </div>
+    </div>
   </div>
 </header>
 
 <section class="wrap" style="padding-bottom:80px">
-  <div class="grid grid-3" id="feed">
-    <div class="card"><p>Scanning for events…</p></div>
-  </div>
+  <div class="grid grid-2" id="feed"><p>Loading&hellip;</p></div>
 </section>
 
 <footer id="footer"></footer>
