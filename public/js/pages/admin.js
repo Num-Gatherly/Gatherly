@@ -22,7 +22,7 @@ function showGate() {
   gate.hidden = false;
   gate.innerHTML = `
     <h3>Staff access</h3>
-    <p style="margin:6px 0 16px">Enter an access code from an executive to unlock the control room.</p>
+    <p style="margin:6px 0 16px">Enter an access code from an executive to unlock the control panel.</p>
     <label class="field">Access code <input id="accessCode" autocomplete="off" placeholder="GATH-XXXX-XXXX"></label>
     <button class="btn btn-primary btn-sm" id="redeemBtn">Redeem code</button>
     <div id="gateMsg" style="margin-top:12px"></div>`;
@@ -64,7 +64,9 @@ function showPanel() {
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
           <h3 id="chatTitle">Chat</h3>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" id="assignTicket">Assign to me</button>
+            <button class="btn btn-ghost btn-sm" id="assignTicket">Claim</button>
+            <button class="btn btn-ghost btn-sm" id="unassignTicket">Unclaim</button>
+            <button class="btn btn-ghost btn-sm" id="escalateTicket">Escalate</button>
             <button class="btn btn-ghost btn-sm" id="closeTicket">Resolve</button>
             <button class="btn btn-ghost btn-sm" id="backTickets">Back</button>
           </div>
@@ -147,7 +149,9 @@ function showPanel() {
     </div>` : ""}
 
     <div class="tabpane" data-pane="audit" hidden>
-      <div class="card"><h3>Audit log</h3><p style="font-size:.85rem;margin:6px 0 14px">Every staff action and any system error, with a plain-English diagnosis and fix for failures.</p><div id="auditList"><p>Loading...</p></div></div>
+      <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3>Audit log</h3>
+      <div class="filter-chips" id="auditFilter"><button class="chip active" data-feed="all">All</button><button class="chip" data-feed="flagged">Watchdog flags</button></div></div>
+      <p style="font-size:.85rem;margin:6px 0 14px">Every staff action and any system error, with a plain-English diagnosis and fix for failures. Watchdog flags surface suspicious or rate-limit activity.</p><div id="auditList"><p>Loading...</p></div></div>
     </div>`;
 
   $("tabs").addEventListener("click", (e) => {
@@ -174,10 +178,17 @@ function loadTickets(status = "open") {
   if (!el) return;
   el.innerHTML = "<p>Loading...</p>";
   api(`/api/tickets?action=list&status=${status}`).then(({ tickets }) => {
+    const dot = (t) => t.status === "closed" ? "#9aa4b2" : t.escalated ? "#ffcf5c" : t.assignedTo ? "#69d99c" : "#ff7a7a";
+    const label = (t) => t.escalated ? "Escalated" : t.assignedTo ? `Claimed by ${esc(t.assignedToName || "staff")}` : "Open";
     el.innerHTML = tickets.length ? tickets.map((t) => `
-      <div class="row" style="cursor:pointer;padding:10px 0;border-bottom:1px solid var(--line)" data-ticket="${esc(t.id)}">
-        <span><b>${esc(t.subject)}</b> <span style="color:var(--muted);font-size:.8rem">@${esc(t.username)}</span></span>
-        <span style="color:var(--muted);font-size:.8rem">${esc(t.topic)} &middot; ${new Date(t.updatedAt).toLocaleDateString()}</span>
+      <div class="row" style="cursor:pointer;padding:10px;border-bottom:1px solid var(--line);border-left:3px solid ${dot(t)};${t.escalated ? "background:rgba(255,207,92,.07)" : ""}" data-ticket="${esc(t.id)}">
+        <span>
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${dot(t)};margin-right:7px"></span>
+          <b>${esc(t.subject)}</b>
+          <span style="color:var(--muted);font-size:.8rem">@${esc(t.username)} &middot; ${esc(t.plan || "free")}</span>
+          ${t.escalated ? `<span class="badge" style="margin-left:6px;color:#ffcf5c;border-color:#ffcf5c">High urgency</span>` : ""}
+        </span>
+        <span style="color:var(--muted);font-size:.8rem">${label(t)} &middot; ${new Date(t.updatedAt).toLocaleDateString()}</span>
       </div>`).join("") : "<p>No tickets here.</p>";
     el.querySelectorAll("[data-ticket]").forEach((row) => row.onclick = () => openChat(row.dataset.ticket, tickets.find((t) => t.id === row.dataset.ticket)));
   }).catch(() => { el.innerHTML = "<p>Failed to load.</p>"; });
@@ -205,8 +216,10 @@ function openChat(id, ticket) {
     try { await api("/api/tickets?action=reply", { method: "POST", body: { id, message: text } }); $("chatInput").value = ""; loadChat(id); }
     catch (e) { flash($("amsg"), e.message); }
   };
-  $("closeTicket").onclick = async () => { try { await api("/api/tickets?action=close", { method: "POST", body: { id } }); flash($("amsg"), "Ticket resolved.", true); backToTickets(); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
-  $("assignTicket").onclick = async () => { try { await api("/api/tickets?action=assign", { method: "POST", body: { id } }); flash($("amsg"), "Assigned to you.", true); } catch (e) { flash($("amsg"), e.message); } };
+  $("closeTicket").onclick = async () => { try { await api("/api/tickets?action=close", { method: "POST", body: { id } }); flash($("amsg"), "Ticket resolved and the user notified.", true); backToTickets(); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
+  $("assignTicket").onclick = async () => { try { await api("/api/tickets?action=assign", { method: "POST", body: { id } }); flash($("amsg"), "Claimed by you.", true); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
+  $("unassignTicket").onclick = async () => { try { await api("/api/tickets?action=unassign", { method: "POST", body: { id } }); flash($("amsg"), "Unclaimed.", true); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
+  $("escalateTicket").onclick = async () => { try { await api("/api/tickets?action=escalate", { method: "POST", body: { id } }); flash($("amsg"), "Marked high urgency.", true); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
   $("backTickets").onclick = backToTickets;
 }
 function backToTickets() { clearInterval(chatTimer); $("ticketList").closest(".card").hidden = false; $("chatPanel").hidden = true; }
@@ -216,7 +229,7 @@ function loadChat(id) {
     if (!m) return;
     m.innerHTML = t.messages.map((msg) => `
       <div style="padding:8px 12px;border-radius:8px;background:${msg.from === "staff" ? "rgba(127,168,255,0.1)" : "rgba(255,255,255,0.04)"}">
-        <span style="font-size:.78rem;color:var(--muted)">${msg.from === "staff" ? "Staff" : "User"} &middot; ${esc(msg.by)} &middot; ${new Date(msg.at).toLocaleTimeString()}</span>
+        <span style="font-size:.78rem;color:var(--muted)">${msg.from === "staff" ? "Staff" : "User"} &middot; ${new Date(msg.at).toLocaleTimeString()}</span>
         <div style="margin-top:4px">${esc(msg.text)}</div></div>`).join("");
     m.scrollTop = m.scrollHeight;
   }).catch(() => {});
@@ -249,7 +262,7 @@ function renderUserTable(users) {
     ${users.map((u) => `<tr>
       <td><b>${esc(u.username)}</b></td><td>${esc(u.plan)}</td><td>${u.credits}</td>
       <td>${u.role ? `<span class="badge">${esc(u.role)}</span>` : "-"}</td>
-      <td>${u.suspended ? `<span class="badge badge-bad">Suspended</span>` : `<span class="badge badge-good">Active</span>`}</td>
+      <td>${u.suspended ? `<span class="badge badge-bad">Suspended</span>` : u.supportBlacklisted ? `<span class="badge" style="color:#ffcf5c;border-color:#ffcf5c">Blacklisted</span>` : `<span class="badge badge-good">Active</span>`}</td>
       <td><button class="btn btn-ghost btn-sm" data-edit="${esc(u.id)}" data-name="${esc(u.username)}">Edit</button></td>
     </tr>`).join("")}</tbody></table>` : "<p>No users found.</p>";
   el.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openUserEdit(b.dataset.edit, b.dataset.name));
@@ -307,8 +320,10 @@ async function openUserEdit(userId, username) {
         <h4 style="margin-bottom:10px">Moderation</h4>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" id="suspendBtn">${u.suspended ? "Unsuspend" : "Suspend"}</button>
+          <button class="btn btn-ghost btn-sm" id="blacklistBtn">${u.supportBlacklisted ? "Remove support blacklist" : "Blacklist from support"}</button>
           <button class="btn btn-danger btn-sm" id="wipeBtn">Wipe all their listings</button>
         </div>
+        ${u.supportBlacklisted && u.blacklistReason ? `<p class="note" style="margin-top:8px">Blacklist reason: ${esc(u.blacklistReason)}</p>` : ""}
         <div id="actionMsg" style="margin-top:8px"></div>
       </div>`;
 
@@ -320,6 +335,15 @@ async function openUserEdit(userId, username) {
     if (exec) $("setRoleBtn").onclick = async () => { try { await api("/api/admin?action=set-role", { method: "POST", body: { userId, role: $("roleSelect").value || null } }); flash($("roleMsg"), "Role applied.", true); } catch (e) { flash($("roleMsg"), e.message); } };
     $("suspendBtn").onclick = async () => { const suspend = !u.suspended; try { await api("/api/admin?action=suspend", { method: "POST", body: { userId, suspended: suspend } }); flash($("actionMsg"), suspend ? "User suspended." : "User unsuspended.", true); u.suspended = suspend; $("suspendBtn").textContent = suspend ? "Unsuspend" : "Suspend"; } catch (e) { flash($("actionMsg"), e.message); } };
     $("wipeBtn").onclick = async () => { if (!confirm("Delete every listing this user has? Cannot be undone.")) return; try { const d = await api("/api/admin?action=wipe-listings", { method: "POST", body: { userId } }); flash($("actionMsg"), `Removed ${d.removed} listing(s).`, true); } catch (e) { flash($("actionMsg"), e.message); } };
+    $("blacklistBtn").onclick = async () => {
+      if (u.supportBlacklisted) {
+        try { await api("/api/admin?action=blacklist-remove", { method: "POST", body: { userId } }); flash($("actionMsg"), "Support blacklist removed.", true); u.supportBlacklisted = false; $("blacklistBtn").textContent = "Blacklist from support"; } catch (e) { flash($("actionMsg"), e.message); }
+      } else {
+        const reason = prompt("Reason for blacklisting this user from support?", "Abuse of the support system");
+        if (reason === null) return;
+        try { const d = await api("/api/admin?action=blacklist-add", { method: "POST", body: { userId, reason } }); flash($("actionMsg"), `Blacklisted.${d.discordRoleApplied ? " Discord role applied." : " (Discord role not applied, check bot permissions.)"}`, true); u.supportBlacklisted = true; $("blacklistBtn").textContent = "Remove support blacklist"; } catch (e) { flash($("actionMsg"), e.message); }
+      }
+    };
   } catch (e) { c.innerHTML = `<p>${esc(e.message)}</p>`; }
 }
 
@@ -405,22 +429,37 @@ function loadExec() {
   }).catch(() => {});
 }
 
-function loadAudit() {
+document.addEventListener("click", (e) => {
+  const chip = e.target.closest("#auditFilter .chip");
+  if (!chip) return;
+  document.querySelectorAll("#auditFilter .chip").forEach((c) => c.classList.remove("active"));
+  chip.classList.add("active");
+  loadAudit(chip.dataset.feed);
+});
+
+function loadAudit(feed = "all") {
   const el = $("auditList");
-  api("/api/admin?action=audit").then(({ entries }) => {
+  const action = feed === "flagged" ? "flagged" : "audit";
+  api(`/api/admin?action=${action}`).then(({ entries }) => {
     el.innerHTML = entries.length ? entries.map((e) => {
+      const flagged = e.level === "warn" || e.detail?.watchdog;
       const isErr = e.level === "error" || e.detail?.error;
+      const accent = flagged ? "#ffcf5c" : isErr ? "var(--bad)" : "var(--text)";
       return `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <span><code style="font-size:.82rem;color:${isErr ? "var(--bad)" : "var(--text)"}">${esc(e.action)}</code> <span style="color:var(--muted);font-size:.8rem">by ${esc(e.actor?.username || "system")}</span></span>
+          <span><code style="font-size:.82rem;color:${accent}">${esc(e.action)}</code> <span style="color:var(--muted);font-size:.8rem">by ${esc(e.actor?.username || "system")}</span></span>
           <span style="color:var(--faint);font-size:.78rem">${new Date(e.at).toLocaleString()}</span>
         </div>
-        ${isErr ? `<div style="margin-top:6px;background:rgba(255,122,122,0.06);border:1px solid rgba(255,122,122,0.25);border-radius:8px;padding:8px 12px">
+        ${flagged && e.detail ? `<div style="margin-top:6px;background:rgba(255,207,92,0.07);border:1px solid rgba(255,207,92,0.3);border-radius:8px;padding:8px 12px">
+          ${e.detail.what ? `<div style="color:#ffcf5c;font-size:.82rem"><b>What:</b> ${esc(e.detail.what)}</div>` : ""}
+          ${e.detail.risk ? `<div style="color:var(--muted);font-size:.82rem;margin-top:3px"><b>Risk:</b> ${esc(e.detail.risk)}</div>` : ""}
+        </div>` : ""}
+        ${isErr && e.detail ? `<div style="margin-top:6px;background:rgba(255,122,122,0.06);border:1px solid rgba(255,122,122,0.25);border-radius:8px;padding:8px 12px">
           <div style="color:var(--bad);font-size:.82rem"><b>Error:</b> ${esc(e.detail.error)}</div>
           ${e.detail.diagnosis ? `<div style="color:var(--muted);font-size:.82rem;margin-top:3px"><b>Cause:</b> ${esc(e.detail.diagnosis)}</div>` : ""}
           ${e.detail.fix ? `<div style="color:var(--good);font-size:.82rem;margin-top:3px"><b>Fix:</b> ${esc(e.detail.fix)}</div>` : ""}
         </div>` : ""}
       </div>`;
-    }).join("") : "<p>No audit entries yet.</p>";
+    }).join("") : "<p>No entries yet.</p>";
   }).catch(() => { el.innerHTML = "<p>Failed to load.</p>"; });
 }
