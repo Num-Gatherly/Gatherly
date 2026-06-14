@@ -1,7 +1,7 @@
 // /api/auth - Discord OAuth login, session management
 import {
-  json, redirect, usersStore, eventsStore, requireUser,
-  makeSessionCookie, clearSessionCookie, encrypt,
+  json, redirect, usersStore, requireUser,
+  makeSessionCookie, clearSessionCookie,
 } from "../lib/util.js";
 import crypto from "node:crypto";
 
@@ -15,21 +15,12 @@ export default async (req) => {
 
   const clientId = process.env.DISCORD_CLIENT_ID;
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-
-  // Use the SITE_URL env var if set, otherwise fall back to the live domain.
-  // No trailing slash. Update SITE_URL in Netlify if the site is ever renamed.
-  const SITE_URL = (process.env.SITE_URL || "https://gatherly-events.netlify.app").replace(/\/$/, "");
-
+  const SITE_URL = (process.env.SITE_URL || "https://gatherly-erlc.xyz").replace(/\/$/, "");
   const redirectUri = `${SITE_URL}/api/auth?action=callback`;
 
-  // ---------------- LOGIN START ----------------
   if (action === "start") {
-    if (!clientId || !clientSecret) {
-      return redirect("/login?error=Discord not configured");
-    }
-
+    if (!clientId || !clientSecret) return redirect("/login?error=Discord not configured");
     const state = crypto.randomUUID();
-
     const authorize = `${AUTH_URL}?` + new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -38,25 +29,17 @@ export default async (req) => {
       state,
       prompt: "consent",
     });
-
     return redirect(authorize, {
       "Set-Cookie": `gatherly_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
     });
   }
 
-  // ---------------- CALLBACK ----------------
   if (action === "callback") {
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
+    const cookieState = (req.headers.get("cookie") || "").match(/gatherly_state=([^;]+)/)?.[1];
+    if (!code || !state || state !== cookieState) return redirect("/login?error=Invalid state");
 
-    const cookieState =
-      (req.headers.get("cookie") || "").match(/gatherly_state=([^;]+)/)?.[1];
-
-    if (!code || !state || state !== cookieState) {
-      return redirect("/login?error=Invalid state");
-    }
-
-    // Exchange code for token
     const tokenRes = await fetch(TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -68,59 +51,44 @@ export default async (req) => {
         redirect_uri: redirectUri,
       }),
     });
-
-    if (!tokenRes.ok) {
-      return redirect("/login?error=Discord rejected login (redirect mismatch)");
-    }
+    if (!tokenRes.ok) return redirect("/login?error=Discord rejected login (redirect mismatch)");
 
     const tokens = await tokenRes.json();
-
-    const infoRes = await fetch(USER_URL, {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
-
-    if (!infoRes.ok) {
-      return redirect("/login?error=Failed to fetch Discord user");
-    }
+    const infoRes = await fetch(USER_URL, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+    if (!infoRes.ok) return redirect("/login?error=Failed to fetch Discord user");
 
     const info = await infoRes.json();
-
     const store = usersStore();
     const userId = `dsc_${info.id}`;
 
-    const avatar = info.avatar
-      ? `https://cdn.discordapp.com/avatars/${info.id}/${info.avatar}.png`
-      : null;
+    // avatar hash only - full URL built client-side so it can vary by size.
+    const avatarHash = info.avatar || null;
 
-    // Preserve any existing fields (role, plan, erlcKeyEnc, etc.) on re-login.
     const existing = (await store.get(userId, { type: "json" })) || {};
     await store.setJSON(userId, {
       ...existing,
       id: userId,
       discordId: info.id,
-      username: info.global_name || info.username,
-      avatar,
+      // username = real unique Discord username (e.g. johndoe or johndoe#1234 legacy).
+      // globalName = display name the user sets (can be anything, changes often).
+      username: info.username,
+      globalName: info.global_name || info.username,
+      avatar: avatarHash,
       updatedAt: new Date().toISOString(),
+      createdAt: existing.createdAt || new Date().toISOString(),
     });
 
-    return redirect("/dashboard", {
-      "Set-Cookie": makeSessionCookie(userId),
-    });
+    return redirect("/dashboard", { "Set-Cookie": makeSessionCookie(userId) });
   }
 
-  // ---------------- ME ----------------
   if (action === "me") {
     const user = await requireUser(req);
     if (!user) return json({ user: null }, 401);
-
     return json({ user });
   }
 
-  // ---------------- LOGOUT ----------------
   if (action === "logout" && req.method === "POST") {
-    return json({ ok: true }, 200, {
-      "Set-Cookie": clearSessionCookie(),
-    });
+    return json({ ok: true }, 200, { "Set-Cookie": clearSessionCookie() });
   }
 
   return json({ error: "Unknown action" }, 404);
