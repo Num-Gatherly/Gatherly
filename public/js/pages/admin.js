@@ -2,8 +2,6 @@ import { boot, api, esc, currentUser } from "/js/app.js";
 boot("/admin");
 
 const $ = (id) => document.getElementById(id);
-const show = (id) => { const e = $(id); if (e) e.style.display = ""; };
-const hide = (id) => { const e = $(id); if (e) e.style.display = "none"; };
 
 let me = null;
 let activeTab = "support";
@@ -16,16 +14,17 @@ async function init() {
     const d = await api("/api/admin?action=whoami");
     me = d;
   } catch {
-    document.body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)">Access denied. <a href="/">Go home</a></div>`;
+    document.body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)">Access denied. You need a staff role to view this page. <a href="/">Go home</a></div>`;
     return;
   }
 
-  // Show exec-only UI elements.
+  const roleEl = $("role");
+  if (roleEl) roleEl.textContent = `Signed in as ${me.globalName || me.username} - ${me.role === "executive" ? "Executive" : "Admin"}`;
+
   if (me.role === "executive") {
     document.querySelectorAll(".exec-only").forEach((el) => el.style.removeProperty("display"));
   }
 
-  // Nav tabs.
   document.querySelectorAll(".cr-tab").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
@@ -38,14 +37,11 @@ function switchTab(tab) {
   activeTab = tab;
   document.querySelectorAll(".cr-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".cr-panel").forEach((p) => p.style.display = p.dataset.panel === tab ? "" : "none");
-
   clearInterval(ticketPollTimer);
-
   if (tab === "support") { loadTickets(); ticketPollTimer = setInterval(loadTickets, 4000); }
   if (tab === "users") loadUsers();
   if (tab === "events") loadEvents();
   if (tab === "announcements") loadAnnouncements();
-  if (tab === "notifications") { /* static form */ }
   if (tab === "executive" && me.role === "executive") loadExec();
   if (tab === "audit") loadAudit();
 }
@@ -65,15 +61,15 @@ async function loadTickets() {
 function renderTickets(tickets) {
   const host = $("ticketList");
   if (!host) return;
-  if (!tickets.length) { host.innerHTML = `<p style="color:var(--muted);padding:20px">No tickets yet.</p>`; return; }
+  if (!tickets.length) { host.innerHTML = `<p style="color:var(--muted)">No tickets yet.</p>`; return; }
   host.innerHTML = tickets.map((t) => {
     const statusColor = t.status === "closed" ? "var(--muted)" : t.escalated ? "var(--yellow,#ffcf5c)" : t.assignedTo ? "var(--green,#69d99c)" : "var(--red,#ff7a7a)";
-    const statusLabel = t.status === "closed" ? "Closed" : t.escalated ? "Escalated" : t.assignedTo ? `Claimed` : "Open";
+    const statusLabel = t.status === "closed" ? "Closed" : t.escalated ? "Escalated" : t.assignedTo ? "Claimed" : "Open";
     return `<div class="card ticket-row" data-id="${esc(t.id)}" style="margin-bottom:10px;cursor:pointer;border-left:3px solid ${statusColor}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
         <div>
           <strong>${esc(t.subject || "No subject")}</strong>
-          <div style="font-size:.82rem;color:var(--muted);margin-top:2px">${esc(t.username)} - ${esc(t.topic)} - ${esc(t.plan || "free")}</div>
+          <div style="font-size:.8rem;color:var(--muted);margin-top:2px">${esc(t.username)} - ${esc(t.topic)} - ${esc(t.plan || "free")}</div>
         </div>
         <span style="font-size:.78rem;color:${statusColor};white-space:nowrap">${statusLabel}</span>
       </div>
@@ -92,7 +88,6 @@ function openTicket(id, t) {
       <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">${m.from === "staff" ? "Staff" : esc(t.username)} - ${new Date(m.at).toLocaleString()}</div>
       <div>${esc(m.text)}</div>
     </div>`).join("");
-
   host.innerHTML = `
     <div class="card" style="margin-top:16px">
       <h3 style="margin-bottom:4px">${esc(t.subject)}</h3>
@@ -141,7 +136,7 @@ async function loadUsers(q = "") {
     if (!users.length) { host.innerHTML = `<p style="color:var(--muted)">No users found.</p>`; return; }
     host.innerHTML = users.map((u) => `
       <div class="card user-row" data-id="${esc(u.id)}" style="margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:12px">
-        ${u.avatar ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'">` : ""}
+        ${u.avatar && u.discordId ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png?size=64" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'">` : `<span style="width:36px;height:36px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0">${esc((u.username || "?")[0].toUpperCase())}</span>`}
         <div style="flex:1;min-width:0">
           <strong>${esc(u.username)}</strong>
           ${u.globalName && u.globalName !== u.username ? `<span style="color:var(--muted);font-size:.82rem"> (${esc(u.globalName)})</span>` : ""}
@@ -159,11 +154,14 @@ function openUser(id, u) {
   const host = $("userDetail");
   if (!host || !u) return;
   const isExec = me.role === "executive";
+  const avatarHtml = u.avatar && u.discordId
+    ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png?size=128" style="width:52px;height:52px;border-radius:50%" onerror="this.style.display='none'">`
+    : `<span style="width:52px;height:52px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;color:#fff">${esc((u.username || "?")[0].toUpperCase())}</span>`;
 
   host.innerHTML = `
     <div class="card" style="margin-top:16px">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
-        ${u.avatar ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png" style="width:52px;height:52px;border-radius:50%" onerror="this.style.display='none'">` : ""}
+        ${avatarHtml}
         <div>
           <h3 style="margin:0">${esc(u.username)}</h3>
           ${u.globalName && u.globalName !== u.username ? `<div style="color:var(--muted);font-size:.88rem">Display name: ${esc(u.globalName)}</div>` : ""}
@@ -285,7 +283,7 @@ window.setRole = async (id) => {
 
 window.deleteAccount = async (id, username) => {
   if (!confirm(`Permanently delete the account for "${username}"? This will also wipe all their event listings and cannot be undone.`)) return;
-  if (!confirm(`Are you absolutely sure? This action is irreversible.`)) return;
+  if (!confirm("Are you absolutely sure? This action is irreversible.")) return;
   const msg = $("userMsg");
   try {
     const d = await api("/api/admin?action=delete-account", { method: "POST", body: { userId: id } });
@@ -321,10 +319,8 @@ async function loadEvents() {
 }
 
 window.adminBoost = async (id, btn) => {
-  try {
-    const d = await api("/api/admin?action=boost", { method: "POST", body: { id } });
-    btn.textContent = d.boosted ? "Unboost" : "Boost";
-  } catch (e) { alert(e.message); }
+  try { const d = await api("/api/admin?action=boost", { method: "POST", body: { id } }); btn.textContent = d.boosted ? "Unboost" : "Boost"; }
+  catch (e) { alert(e.message); }
 };
 
 window.adminEndEvent = async (id) => {
