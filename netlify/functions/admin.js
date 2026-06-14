@@ -1,9 +1,10 @@
 // /api/admin - control panel: users, credits, plans, roles, support blacklist,
 // events, announcements, notifications, audit + watchdog feed, access codes.
+// NEW: delete-account (executive only, max 5 per hour).
 import {
   json, requireUser, isStaff, isExec, usersStore, eventsStore, miscStore,
-  auditStore, codesStore, audit, clampStr, adminCode, execCode, normalizePlan, PLAN_INFO,
-  guard, flagWatchdog, addGuildRole, removeGuildRole, monthKey,
+  auditStore, codesStore, ticketsStore, audit, clampStr, adminCode, execCode,
+  normalizePlan, PLAN_INFO, guard, flagWatchdog, addGuildRole, removeGuildRole, monthKey,
 } from "../lib/util.js";
 
 export default async (req) => {
@@ -23,18 +24,15 @@ async function handler(req) {
     return json({ content: { ...content, announcements, notifications } });
   }
 
-  // ---- Redeem an access code (any logged-in user). Brute-force protected. ----
   if (action === "redeem-code" && req.method === "POST") {
     const user = await requireUser(req);
     if (!user) return json({ error: "Log in first." }, 401);
-    // 5 attempts per hour per user. A trip is flagged to the watchdog.
     const blocked = await guard(req, user, `redeem:${user.id}`, 5, 3600, {
       kind: "code-bruteforce",
       what: "Repeated access-code redemption attempts.",
       risk: "Possible attempt to guess an admin or executive access code.",
     });
     if (blocked) return blocked;
-
     const b = await req.json().catch(() => ({}));
     const codeStr = clampStr(b.code, 60).toUpperCase();
     if (!codeStr) return json({ error: "Enter your access code." }, 400);
@@ -54,8 +52,6 @@ async function handler(req) {
     return json({ ok: true, role: grant });
   }
 
-  // ---- First-run executive claim via EXEC_SETUP_CODE. Not rate limited (so the
-  //      legitimate owner is never locked out) but failures are flagged. ----
   if (action === "claim-exec" && req.method === "POST") {
     const user = await requireUser(req);
     if (!user) return json({ error: "Log in first." }, 401);
@@ -77,22 +73,77 @@ async function handler(req) {
   const evStore = eventsStore();
   const uStore = usersStore();
 
-  if (action === "whoami") return json({ id: user.id, username: user.username, role: user.role });
+  if (action === "whoami") return json({ id: user.id, username: user.username, globalName: user.globalName || user.username, role: user.role });
 
   if (action === "users" || action === "users-search") {
     const q = (url.searchParams.get("q") || "").toLowerCase().trim();
     const { blobs } = await uStore.list();
     const all = await Promise.all(blobs.map((b) => uStore.get(b.key, { type: "json" })));
     let users = all.filter(Boolean);
-    if (q) users = users.filter((u) => (u.username?.toLowerCase().includes(q) || u.id?.toLowerCase().includes(q) || u.discordId?.toLowerCase().includes(q)));
-    users = users.slice(0, 50).map((u) => ({ id: u.id, username: u.username, plan: normalizePlan(u.plan), role: u.role || null, credits: u.credits ?? 0, suspended: Boolean(u.suspended), supportBlacklisted: Boolean(u.supportBlacklist?.active), createdAt: u.createdAt, discordId: u.discordId, avatar: u.avatar || null }));
+    if (q) users = users.filter((u) => (
+      u.username?.toLowerCase().includes(q) ||
+      u.globalName?.toLowerCase().includes(q) ||
+      u.id?.toLowerCase().includes(q) ||
+      u.discordId?.toLowerCase().includes(q)
+    ));
+    users = users.slice(0, 50).map((u) => ({
+      id: u.id,
+      // username = real Discord username (e.g. johndoe), globalName = display name
+      username: u.username,
+      globalName: u.globalName || u.username,
+      plan: normalizePlan(u.plan),
+      role: u.role || null,
+      credits: u.credits ?? 0,
+      suspended: Boolean(u.suspended),
+      supportBlacklisted: Boolean(u.supportBlacklist?.active),
+      createdAt: u.createdAt,
+      discordId: u.discordId,
+      avatar: u.avatar || null,
+    }));
     return json({ users });
   }
 
   if (action === "user-get") {
     const u = await uStore.get(url.searchParams.get("id"), { type: "json" });
     if (!u) return json({ error: "User not found." }, 404);
-    return json({ user: { id: u.id, username: u.username, plan: normalizePlan(u.plan), role: u.role || null, credits: u.credits ?? 0, suspended: Boolean(u.suspended), supportBlacklisted: Boolean(u.supportBlacklist?.active), blacklistReason: u.supportBlacklist?.reason || null, discordId: u.discordId, avatar: u.avatar || null } });
+    return json({ user: {
+      id: u.id,
+      username: u.username,
+      globalName: u.globalName || u.username,
+      plan: normalizePlan(u.plan),
+      role: u.role || null,
+      credits: u.credits ?? 0,
+      suspended: Boolean(u.suspended),
+      supportBlacklisted: Boolean(u.supportBlacklist?.active),
+      blacklistReason: u.supportBlacklist?.reason || null,
+      discordId: u.discordId,
+      avatar: u.avatar || null,
+    } });
+  }
+
+  // ---- Delete account (executive only, 5 per hour) ----
+  if (action === "delete-account" && req.method === "POST") {
+    if (!isExec(user)) return json({ error: "Executive only." }, 403);
+    const blocked = await guard(req, user, `delete-account:exec`, 5, 3600, {
+      kind: "account-deletion",
+      what: "Executive account deletion rate limit hit.",
+      risk: "More than 5 accounts deleted in one hour by an executive.",
+    });
+    if (blocked) return blocked;
+    const b = await req.json().catch(() => ({}));
+    const targetId = clampStr(b.userId, 100);
+    if (!targetId) return json({ error: "userId is required." }, 400);
+    const target = await uStore.get(targetId, { type: "json" });
+    if (!target) return json({ error: "User not found." }, 404);
+    // Wipe their event listings.
+    const { blobs: evBlobs } = await evStore.list();
+    const allEvs = await Promise.all(evBlobs.map((x) => evStore.get(x.key, { type: "json" })));
+    let evRemoved = 0;
+    for (const e of allEvs) if (e && e.userId === targetId) { await evStore.delete(e.id); evRemoved++; }
+    // Delete the user record.
+    await uStore.delete(targetId);
+    await audit(user, "user.delete-account", { targetId, targetUsername: target.username, eventsRemoved: evRemoved });
+    return json({ ok: true, eventsRemoved: evRemoved });
   }
 
   if ((action === "credits-add" || action === "credits-remove" || action === "credits-set") && req.method === "POST") {
@@ -146,7 +197,6 @@ async function handler(req) {
     return json({ ok: true, suspended: Boolean(b.suspended) });
   }
 
-  // ---- Support blacklist: blocks the website support form AND roles them in Discord ----
   if (action === "blacklist-add" && req.method === "POST") {
     const b = await req.json().catch(() => ({}));
     const target = await uStore.get(b.userId, { type: "json" });
@@ -272,7 +322,6 @@ async function handler(req) {
     return json({ ok: true });
   }
 
-  // ---- Access codes. Generation/revocation is executive-only and NOT rate limited. ----
   if (action === "gen-code" && req.method === "POST") {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
     const b = await req.json().catch(() => ({}));
