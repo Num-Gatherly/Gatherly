@@ -7,12 +7,12 @@ const PLANS = {
   free: {
     id: "free", name: "Gatherly", tagline: "Everything you need to start filling sessions.",
     prices: { monthly: 0, annual: 0, lifetime: 0 }, credits: 0,
-    features: ["6 event listings per month", "Discovery feed placement", "Core report: joins, peak, sessions", "One-click join-code reveal", "Live in-game player counts"],
+    features: ["6 event listings per month", "Discovery feed placement", "One-click join-code reveal", "Live in-game player counts"],
   },
   pro: {
     id: "pro", name: "Gatherly Pro", tagline: "Full analytics and the tools to grow.",
     prices: { monthly: 6.99, annual: 75, lifetime: 179 }, credits: 8,
-    features: ["Everything in Gatherly", "14 event listings per month", "Full Health Score and funnel", "Scenario benchmarking", "Scenario DNA and fatigue index", "Dead hour detection", "Loyalty tracker", "Staff ratio alerts", "Discord webhook delivery", "8 boost credits per month", "Best-time-to-host heatmap", "Pinned support priority"],
+    features: ["Everything in Gatherly", "14 event listings per month", "Full analytics report", "Full Health Score and funnel", "Scenario benchmarking", "Scenario DNA and fatigue index", "Dead hour detection", "Loyalty tracker", "Staff ratio alerts", "Discord webhook delivery", "8 boost credits per month", "Best-time-to-host heatmap", "Pinned support priority"],
   },
   ultra: {
     id: "ultra", name: "Gatherly Ultra", tagline: "The complete intelligence suite.", popular: true,
@@ -74,73 +74,74 @@ function setCycle(c) {
 }
 
 /* ----------------------- Comparison table ------------------------------- */
-const COMPARISON = [
-  { feature: "Event advertising and discovery feed",    free: true,       pro: true,        ultra: true,       melonly: false },
-  { feature: "Live in-game player counts",              free: true,       pro: true,        ultra: true,       melonly: false },
-  { feature: "Post-event analytics report",             free: true,       pro: true,        ultra: true,       melonly: false },
-  { feature: "Listings per month",                      free: "6",        pro: "14",        ultra: "21",       melonly: false },
-  { feature: "Boost credits per month",                 free: false,      pro: "8",         ultra: "24",       melonly: false },
-  { feature: "Health score",                            free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "Funnel analytics (views to joins)",       free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "Scenario benchmarking",                   free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "Scenario DNA and fatigue index",          free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "Dead hour detection",                     free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "Loyalty tracker (returning player rate)", free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "Staff ratio alerts",                      free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "Best-time-to-host heatmap",               free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "Discord webhook delivery",                free: false,      pro: true,        ultra: true,       melonly: false },
-  { feature: "AI-generated report summaries",           free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Predictive forecasting",                  free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Villain detection",                       free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Ghost staff detection",                   free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Staff fatigue score",                     free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Queue intelligence",                      free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Golden hour analysis",                    free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Moderation pressure map",                 free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Server health trend line",                free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Tipping point analysis",                  free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Weekly performance report",               free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Bot DM report delivery",                  free: false,      pro: false,       ultra: true,       melonly: false },
-  { feature: "Discord linked roles",                    free: false,      pro: false,       ultra: false,      melonly: true  },
-  { feature: "Shift tracking",                          free: false,      pro: false,       ultra: false,      melonly: true  },
-  { feature: "Punishment logs",                         free: false,      pro: false,       ultra: false,      melonly: true  },
-  { feature: "ER:LC auto shifts",                       free: false,      pro: false,       ultra: false,      melonly: true  },
-  { feature: "Monthly price",                           free: "Free",     pro: "$6.99",     ultra: "$14.99",   melonly: "$9.99+" },
-];
-
 function renderComparison() {
   const host = $("comparisonTable");
   if (!host) return;
-  const tick = (v) => {
-    if (v === true)  return `<span style="color:var(--good,#69d99c);font-size:1.1rem">✓</span>`;
-    if (v === false) return `<span style="color:var(--muted);opacity:.35;font-size:1rem">✕</span>`;
-    return `<span style="font-size:.82rem;color:var(--text)">${esc(String(v))}</span>`;
-  };
+
+  const YES = `<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:rgba(105,217,156,0.15);border:1.5px solid rgba(105,217,156,0.5)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#69d99c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
+  const NO  = `<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:rgba(148,170,205,0.08);border:1.5px solid rgba(148,170,205,0.2)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(148,170,205,0.35)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span>`;
+  const pill = (v) => `<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:.75rem;font-weight:500;background:rgba(127,168,255,0.15);color:#7fa8ff;border:0.5px solid rgba(127,168,255,0.3)">${esc(String(v))}</span>`;
+  const cell = (v) => v === true ? YES : v === false ? NO : pill(v);
+
+  const ROWS = [
+    { section: "Core" },
+    { f: "Event advertising and discovery feed", free: true,  pro: true,  ultra: true  },
+    { f: "Live in-game player counts",           free: true,  pro: true,  ultra: true  },
+    { f: "One-click join-code reveal",           free: true,  pro: true,  ultra: true  },
+    { f: "Listings per month",                   free: "6",   pro: "14",  ultra: "21"  },
+    { f: "Boost credits per month",              free: false, pro: "8",   ultra: "24"  },
+    { section: "Analytics" },
+    { f: "Post-event analytics report",          free: false, pro: true,  ultra: true  },
+    { f: "Health score",                         free: false, pro: true,  ultra: true  },
+    { f: "Funnel analytics",                     free: false, pro: true,  ultra: true  },
+    { f: "Scenario benchmarking",                free: false, pro: true,  ultra: true  },
+    { f: "Scenario DNA and fatigue index",       free: false, pro: true,  ultra: true  },
+    { f: "Dead hour detection",                  free: false, pro: true,  ultra: true  },
+    { f: "Loyalty tracker",                      free: false, pro: true,  ultra: true  },
+    { f: "Staff ratio alerts",                   free: false, pro: true,  ultra: true  },
+    { f: "Best-time-to-host heatmap",            free: false, pro: true,  ultra: true  },
+    { f: "Discord webhook delivery",             free: false, pro: true,  ultra: true  },
+    { section: "Ultra intelligence" },
+    { f: "AI-generated report summaries",        free: false, pro: false, ultra: true  },
+    { f: "Predictive forecasting",               free: false, pro: false, ultra: true  },
+    { f: "Villain detection",                    free: false, pro: false, ultra: true  },
+    { f: "Ghost staff detection",                free: false, pro: false, ultra: true  },
+    { f: "Staff fatigue score",                  free: false, pro: false, ultra: true  },
+    { f: "Queue intelligence",                   free: false, pro: false, ultra: true  },
+    { f: "Golden hour analysis",                 free: false, pro: false, ultra: true  },
+    { f: "Moderation pressure map",              free: false, pro: false, ultra: true  },
+    { f: "Server health trend line",             free: false, pro: false, ultra: true  },
+    { f: "Tipping point analysis",               free: false, pro: false, ultra: true  },
+    { f: "Weekly performance report",            free: false, pro: false, ultra: true  },
+    { f: "Bot DM report delivery",               free: false, pro: false, ultra: true  },
+    { section: "Pricing" },
+    { f: "Monthly price",                        free: "Free", pro: "$6.99", ultra: "$14.99" },
+  ];
+
   host.innerHTML = `
     <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:.85rem;min-width:560px">
+      <table style="width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;border:0.5px solid rgba(127,168,255,0.22);background:rgba(127,168,255,0.04)">
         <thead>
-          <tr style="border-bottom:1px solid var(--line)">
-            <th style="text-align:left;padding:10px 12px;color:var(--muted);font-weight:500">Feature</th>
-            <th style="text-align:center;padding:10px 12px;color:var(--muted);font-weight:500">Free</th>
-            <th style="text-align:center;padding:10px 12px;color:var(--text);font-weight:600">Pro</th>
-            <th style="text-align:center;padding:10px 12px;color:var(--signal);font-weight:700">Ultra</th>
-            <th style="text-align:center;padding:10px 12px;color:var(--muted);font-weight:400;opacity:.7">Melonly Plus</th>
+          <tr style="background:rgba(127,168,255,0.10)">
+            <th style="text-align:left;padding:14px 16px;font-size:.8rem;font-weight:500;color:var(--muted);border-bottom:0.5px solid rgba(127,168,255,0.18);width:42%">Feature</th>
+            <th style="text-align:center;padding:14px 16px;font-size:.8rem;font-weight:500;color:var(--muted);border-bottom:0.5px solid rgba(127,168,255,0.18)">Free</th>
+            <th style="text-align:center;padding:14px 16px;font-size:.8rem;font-weight:500;color:var(--text);border-bottom:0.5px solid rgba(127,168,255,0.18)">Pro</th>
+            <th style="text-align:center;padding:14px 16px;font-size:.8rem;font-weight:500;color:#7fa8ff;border-bottom:0.5px solid rgba(127,168,255,0.18);background:rgba(127,168,255,0.06)">Ultra</th>
           </tr>
         </thead>
         <tbody>
-          ${COMPARISON.map((row, i) => `
-            <tr style="border-bottom:1px solid var(--line);background:${i % 2 === 0 ? "rgba(255,255,255,.015)" : "transparent"}">
-              <td style="padding:9px 12px;color:var(--text)">${esc(row.feature)}</td>
-              <td style="text-align:center;padding:9px 12px">${tick(row.free)}</td>
-              <td style="text-align:center;padding:9px 12px">${tick(row.pro)}</td>
-              <td style="text-align:center;padding:9px 12px">${tick(row.ultra)}</td>
-              <td style="text-align:center;padding:9px 12px;opacity:.55">${tick(row.melonly)}</td>
-            </tr>`).join("")}
+          ${ROWS.map((r) => {
+            if (r.section) return `<tr><td colspan="4" style="padding:8px 16px;font-size:.7rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(127,168,255,0.7);background:rgba(127,168,255,0.06);border-bottom:0.5px solid rgba(127,168,255,0.08)">${r.section}</td></tr>`;
+            return `<tr style="border-bottom:0.5px solid rgba(127,168,255,0.08)">
+              <td style="padding:11px 16px;font-size:.82rem;color:var(--muted);text-align:left;border-bottom:0.5px solid rgba(127,168,255,0.08)">${esc(r.f)}</td>
+              <td style="text-align:center;padding:11px 16px;border-bottom:0.5px solid rgba(127,168,255,0.08)">${cell(r.free)}</td>
+              <td style="text-align:center;padding:11px 16px;border-bottom:0.5px solid rgba(127,168,255,0.08)">${cell(r.pro)}</td>
+              <td style="text-align:center;padding:11px 16px;border-bottom:0.5px solid rgba(127,168,255,0.08);background:rgba(127,168,255,0.03)">${cell(r.ultra)}</td>
+            </tr>`;
+          }).join("")}
         </tbody>
       </table>
-    </div>
-    <p style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:10px">Melonly features and pricing based on their public pricing page. Last checked June 2026.</p>`;
+    </div>`;
 }
 
 /* ----------------------- Credit packs ----------------------------------- */
@@ -253,5 +254,3 @@ document.querySelectorAll(".billing-toggle button").forEach((b) => b.onclick = (
 render();
 renderCredits();
 renderComparison();
-
-
