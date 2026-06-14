@@ -11,7 +11,7 @@ function formMarkup(prefillName = "") {
   return `
     <div class="card">
       <div id="msg"></div>
-      <label class="field">Your exact Discord name <small>So our team can reach you. Prefilled when you're logged in.</small>
+      <label class="field">Your Discord username <small>Your real username (e.g. johndoe), not your display name. Prefilled when you're logged in.</small>
         <input id="from" maxlength="60" autocomplete="off" placeholder="your_discord_username" value="${esc(prefillName)}">
       </label>
       <label class="field">Topic
@@ -50,7 +50,6 @@ function joinGate(invite) {
 }
 
 function blacklistGate(invite) {
-  // Glass, blue-tinted screen over a blurred dummy form.
   root().innerHTML = `
     <div style="position:relative;border-radius:18px;overflow:hidden">
       <div style="filter:blur(7px);pointer-events:none;opacity:.45" aria-hidden="true">${formMarkup("")}</div>
@@ -71,7 +70,10 @@ function showForm(prefillName) {
   renderMine();
 }
 
-const say = (text, ok = false) => { const m = $("msg"); if (m) m.innerHTML = `<div class="alert ${ok ? "alert-ok" : "alert-err"}">${ok ? text : esc(text)}</div>`; };
+const say = (text, ok = false) => {
+  const m = $("msg");
+  if (m) m.innerHTML = `<div class="alert ${ok ? "alert-ok" : "alert-err"}">${ok ? text : esc(text)}</div>`;
+};
 
 async function submit() {
   if ($("website").value) return;
@@ -89,7 +91,7 @@ async function submit() {
   } catch (e) {
     if (e.message && /blacklist/i.test(e.message)) return init();
     if (e.message && /join the gatherly/i.test(e.message)) return joinGate(INVITE_FALLBACK);
-    if (/log in/i.test(e.message)) say(`You need to log in first. <a href="/api/auth?action=start">Continue with Discord</a>`, false);
+    if (/log in/i.test(e.message || "")) say(`You need to log in first. <a href="/api/auth?action=start">Continue with Discord</a>`, false);
     else say(e.message);
   } finally { if ($("send")) $("send").disabled = false; }
 }
@@ -124,10 +126,11 @@ async function init() {
     const invite = pc.invite || INVITE_FALLBACK;
     if (pc.blacklisted) return blacklistGate(invite);
     if (pc.member === false) return joinGate(invite);
+    // Prefill with real Discord username, not display name.
     showForm(me.username || "");
   } catch (e) {
     if (/log in/i.test(e.message || "")) return loginGate();
-    showForm(me.username || ""); // precheck unavailable, allow the form; create re-checks
+    showForm(me.username || "");
   }
 }
 
