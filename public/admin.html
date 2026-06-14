@@ -9,15 +9,18 @@
   <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600&f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 0; }
-    .tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-body); font-weight: 600; font-size: .9rem; padding: 10px 14px; cursor: pointer; transition: color .15s, border-color .15s; }
-    .tab:hover { color: var(--text); }
-    .tab.active { color: var(--text); border-bottom-color: var(--signal); }
-    .tab-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #fff; font-size: .7rem; margin-left: 4px; }
-    .tbl { width: 100%; border-collapse: collapse; }
-    .tbl th { text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 8px 10px; border-bottom: 1px solid var(--line); }
-    .tbl td { padding: 10px; border-bottom: 1px solid var(--line); font-size: .9rem; vertical-align: middle; }
-    .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .cr-tabs { display:flex;gap:4px;flex-wrap:wrap;margin-bottom:24px;border-bottom:1px solid var(--line);padding-bottom:0; }
+    .cr-tab { background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font-body);font-weight:600;font-size:.88rem;padding:10px 14px;cursor:pointer;transition:color .15s,border-color .15s;position:relative; }
+    .cr-tab:hover { color:var(--text); }
+    .cr-tab.active { color:var(--text);border-bottom-color:var(--signal); }
+    .cr-badge { display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--bad,#ff7a7a);color:#fff;font-size:.68rem;margin-left:5px;vertical-align:middle; }
+    .cr-panel { display:none; }
+    .tbl { width:100%;border-collapse:collapse; }
+    .tbl th { text-align:left;font-size:.73rem;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);padding:8px 10px;border-bottom:1px solid var(--line); }
+    .tbl td { padding:10px;border-bottom:1px solid var(--line);font-size:.88rem;vertical-align:middle; }
+    .exec-only { display:none; }
+    .split-panel { display:grid;grid-template-columns:1fr 1fr;gap:18px; }
+    @media(max-width:700px){ .split-panel { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -33,12 +36,128 @@
 </header>
 
 <section class="wrap" style="padding-bottom:80px">
-  <div class="card" id="gate" hidden></div>
-  <div id="panel" hidden></div>
+
+  <nav class="cr-tabs">
+    <button class="cr-tab" data-tab="support">Support <span class="cr-badge" id="supportBadge" style="display:none"></span></button>
+    <button class="cr-tab" data-tab="users">Users</button>
+    <button class="cr-tab" data-tab="events">Events</button>
+    <button class="cr-tab" data-tab="announcements">Announcements</button>
+    <button class="cr-tab" data-tab="notifications">Notifications</button>
+    <button class="cr-tab exec-only" data-tab="executive">Executive</button>
+    <button class="cr-tab" data-tab="audit">Audit log</button>
+  </nav>
+
+  <!-- SUPPORT -->
+  <div class="cr-panel" data-panel="support">
+    <div class="split-panel">
+      <div>
+        <h3 style="margin-bottom:14px">Open tickets</h3>
+        <div id="ticketList"><p style="color:var(--muted)">Loading&hellip;</p></div>
+      </div>
+      <div id="ticketDetail"></div>
+    </div>
+  </div>
+
+  <!-- USERS -->
+  <div class="cr-panel" data-panel="users">
+    <input id="userSearch" class="input" placeholder="Search by username or Discord ID&hellip;" style="width:100%;max-width:400px;margin-bottom:16px">
+    <div class="split-panel">
+      <div id="userList"><p style="color:var(--muted)">Loading&hellip;</p></div>
+      <div id="userDetail"></div>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div class="cr-panel" data-panel="events">
+    <h3 style="margin-bottom:14px">All events</h3>
+    <div id="eventList"><p style="color:var(--muted)">Loading&hellip;</p></div>
+  </div>
+
+  <!-- ANNOUNCEMENTS -->
+  <div class="cr-panel" data-panel="announcements">
+    <div class="split-panel">
+      <div>
+        <h3 style="margin-bottom:14px">Add announcement</h3>
+        <div class="card">
+          <label class="field">Text <small>Shown in the site banner.</small>
+            <input id="announceText" class="input" maxlength="240" placeholder="Announcement text&hellip;">
+          </label>
+          <label class="field">Link (optional)
+            <input id="announceLink" class="input" maxlength="300" placeholder="https://&hellip;">
+          </label>
+          <label class="field">Duration (minutes, leave blank for permanent)
+            <input id="announceDuration" class="input" type="number" min="1" placeholder="e.g. 60">
+          </label>
+          <button class="btn btn-primary btn-sm" onclick="addAnnounce()">Add announcement</button>
+          <div id="announceMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:14px">Active announcements</h3>
+        <div id="announceList"><p style="color:var(--muted)">Loading&hellip;</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTIFICATIONS -->
+  <div class="cr-panel" data-panel="notifications">
+    <div class="card" style="max-width:520px">
+      <h3 style="margin-bottom:14px">Send notification</h3>
+      <label class="field">Title
+        <input id="notifyTitle" class="input" maxlength="80" placeholder="Notification title">
+      </label>
+      <label class="field">Body (optional)
+        <input id="notifyBody" class="input" maxlength="300" placeholder="Short description&hellip;">
+      </label>
+      <label class="field">Link (optional)
+        <input id="notifyLink" class="input" maxlength="300" placeholder="https://&hellip;">
+      </label>
+      <label class="field">Duration (minutes, leave blank for permanent)
+        <input id="notifyDuration" class="input" type="number" min="1" placeholder="e.g. 60">
+      </label>
+      <button class="btn btn-primary btn-sm" onclick="addNotification()">Send to all users</button>
+      <div id="notifyMsg" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- EXECUTIVE -->
+  <div class="cr-panel exec-only" data-panel="executive">
+    <div class="split-panel">
+      <div>
+        <h3 style="margin-bottom:14px">Access codes</h3>
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="genCode('admin')">Generate admin code</button>
+            <button class="btn btn-ghost btn-sm" onclick="genCode('executive')">Generate executive code</button>
+          </div>
+          <div id="execMsg" style="margin-top:10px"></div>
+        </div>
+        <div id="codeList"></div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:14px">Homepage content</h3>
+        <div class="card">
+          <label class="field">Hero headline
+            <input id="heroHeadline" class="input" maxlength="120" placeholder="Fill every session.">
+          </label>
+          <label class="field">Hero subheading
+            <input id="heroSub" class="input" maxlength="200" placeholder="ER:LC event advertising&hellip;">
+          </label>
+          <button class="btn btn-primary btn-sm" onclick="saveContent()">Save content</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUDIT LOG -->
+  <div class="cr-panel" data-panel="audit">
+    <h3 style="margin-bottom:14px">Audit log</h3>
+    <div id="auditList"><p style="color:var(--muted)">Loading&hellip;</p></div>
+  </div>
+
 </section>
 
 <footer id="footer"></footer>
-
 <script type="module" src="/js/pages/admin.js"></script>
 </body>
 </html>
