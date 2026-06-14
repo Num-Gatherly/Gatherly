@@ -17,31 +17,17 @@
     <a href="/" class="back-home">&larr; Back to home</a>
     <span class="kicker">Support</span>
     <h1 style="font-size:clamp(2rem,4vw,3rem)">Talk to a person</h1>
-    <p style="margin-top:10px;max-width:520px">Send a message and our team replies straight to your Discord DMs through the Gatherly bot. Billing questions, broken reports, takedowns, or plan enquiries.</p>
+    <p style="margin-top:10px;max-width:520px">Send a message and our team replies straight to your Discord DMs through the Gatherly bot, where you can reply back too. Billing questions, broken reports, takedowns, or plan enquiries.</p>
   </div>
 </header>
 
+<section class="wrap" style="padding-bottom:30px;max-width:640px">
+  <div id="supportRoot"></div>
+</section>
+
 <section class="wrap" style="padding-bottom:80px;max-width:640px">
-  <div class="card">
-    <div id="msg"></div>
-    <label class="field">Your exact Discord name <small>So our team can reach you. We prefill this when you're logged in.</small>
-      <input id="from" maxlength="60" autocomplete="off" placeholder="your_discord_username">
-    </label>
-    <label class="field">Topic
-      <select id="topic">
-        <option>Billing</option><option>Reports not generating</option><option>Listing or content issue</option>
-        <option>Account or data request</option><option>Plan enquiry</option><option>Something else</option>
-      </select>
-    </label>
-    <label class="field">Subject <small>A short summary.</small>
-      <input id="subject" maxlength="100" autocomplete="off" placeholder="Brief summary of your issue">
-    </label>
-    <label class="field">Message
-      <textarea id="body" rows="5" maxlength="1500"></textarea>
-    </label>
-    <input class="hp" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-    <button class="btn btn-primary" id="send">Send message</button>
-  </div>
+  <h3 style="margin-bottom:12px">Your recent requests</h3>
+  <div id="mine"></div>
 </section>
 
 <footer id="footer"></footer>
