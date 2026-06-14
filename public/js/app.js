@@ -55,10 +55,24 @@ export function renderNav(active = "") {
   }).catch(() => {});
 }
 
+// Build full Discord avatar URL from stored hash + discordId.
+// auth.js stores just the hash; this reconstructs the CDN URL.
+function avatarUrl(user, size = 64) {
+  if (!user) return null;
+  // If avatar looks like a full URL (legacy), use it directly.
+  if (user.avatar && user.avatar.startsWith("http")) return user.avatar;
+  // If avatar is a hash and we have discordId, build the CDN URL.
+  if (user.avatar && user.discordId) {
+    return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png?size=${size}`;
+  }
+  return null;
+}
+
 function avatarMarkup(user, size = 28) {
-  if (user.avatar) return `<img src="${esc(user.avatar)}" alt="" width="${size}" height="${size}" style="border-radius:50%;display:block;object-fit:cover">`;
+  const url = avatarUrl(user, size * 2);
+  if (url) return `<img src="${esc(url)}" alt="" width="${size}" height="${size}" style="border-radius:50%;display:block;object-fit:cover" onerror="this.style.display='none'">`;
   const letter = (user.username || "?")[0].toUpperCase();
-  return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.42)}px;font-weight:700;color:#fff">${esc(letter)}</span>`;
+  return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.42)}px;font-weight:700;color:#fff">${esc(letter)}</span>`;
 }
 
 function buildUserButton(el, user) {
@@ -87,6 +101,7 @@ function buildUserButton(el, user) {
         ${avatarMarkup(user, 36)}
         <div>
           <div class="ndd-name">${esc(user.username)}</div>
+          ${user.globalName && user.globalName !== user.username ? `<div class="ndd-meta" style="font-size:.78rem;opacity:.7">${esc(user.globalName)}</div>` : ""}
           <div class="ndd-meta">${esc(planLabel(user.plan))} &middot; <b>${user.credits ?? 0} credits</b></div>
         </div>
       </div>
@@ -175,7 +190,7 @@ export function renderRadar(el, blips = [], label = "") {
     const href = b.id ? `/events#${b.id}` : "/events";
     return `<a href="${href}">
       <circle class="radar-blip ${b.live ? "live" : ""}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${b.live ? "4.2" : "3.2"}" style="animation-delay:${(i * 0.55).toFixed(2)}s"><title>${esc(b.title)} - ${esc(b.scenario)}</title></circle>
-      ${b.live ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="none" stroke="var(--live)" stroke-width="1" opacity="0.3" style="animation:radar-ping 2s ease-out infinite;animation-delay:${(i*0.4).toFixed(2)}s"/>` : ""}
+      ${b.live ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="none" stroke="var(--live)" stroke-width="1" opacity="0.3" style="animation:radar-ping 2s ease-out infinite;animation-delay:${(i * 0.4).toFixed(2)}s"/>` : ""}
     </a>`;
   }).join("");
   el.innerHTML = `
