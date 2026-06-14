@@ -6,6 +6,8 @@ const $ = (id) => document.getElementById(id);
 const say = (t, ok = false) => { $("msg").innerHTML = `<div class="alert ${ok ? "alert-ok" : "alert-err"}">${esc(t)}</div>`; };
 
 let me = null;
+let allEvents = [];
+
 try { me = (await api("/api/auth?action=me")).user; } catch {}
 
 if (!me) {
@@ -14,14 +16,14 @@ if (!me) {
 } else {
   const rank = planRank(me.plan);
   const credits = me.credits ?? 0;
-  $("hello").innerHTML = `Signed in as <b>${esc(me.username)}</b> &middot; <span style="color:var(--signal)">${esc(planLabel(me.plan))}</span> &middot; <span style="color:var(--live);font-weight:600">${credits} boost credit${credits === 1 ? "" : "s"}</span>`;
+  $("hello").innerHTML = `Signed in as <b>${esc(me.username)}</b>${me.globalName && me.globalName !== me.username ? ` <span style="color:var(--muted);font-size:.88rem">(${esc(me.globalName)})</span>` : ""} &middot; <span style="color:var(--signal)">${esc(planLabel(me.plan))}</span> &middot; <span style="color:var(--live);font-weight:600">${credits} boost credit${credits === 1 ? "" : "s"}</span>`;
 
   if (rank < 2) {
     $("upgradeBanner").hidden = false;
     $("upgradeBanner").innerHTML = `
       <div>
         <div style="font-weight:700;color:var(--text)">Unlock the full platform</div>
-        <div style="color:var(--muted);font-size:.88rem;margin-top:4px">You're on <b style="color:var(--text)">${esc(planLabel(me.plan))}</b>. ${rank === 0 ? "Upgrade to Gatherly Pro for full analytics and benchmarks, or Ultra for AI reports, forecasting, and 6 boost credits a week." : "Upgrade to Gatherly Ultra for AI report summaries, predictive forecasting, staff intelligence, and 6 boost credits a week."}</div>
+        <div style="color:var(--muted);font-size:.88rem;margin-top:4px">You're on <b style="color:var(--text)">${esc(planLabel(me.plan))}</b>. ${rank === 0 ? "Upgrade to Gatherly Pro for full analytics and benchmarks, or Ultra for AI reports, forecasting, and boost credits." : "Upgrade to Gatherly Ultra for AI report summaries, predictive forecasting, and staff intelligence."}</div>
       </div>
       <a href="/pricing" class="btn btn-primary btn-sm" style="white-space:nowrap">Upgrade plan</a>`;
   }
@@ -30,7 +32,7 @@ if (!me) {
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
       <div>
         <h3>Boost credits</h3>
-        <p style="font-size:.85rem;margin-top:4px">Spend a credit to pin an event to the top of discovery with a red highlight, on a future event or one that's already live.</p>
+        <p style="font-size:.85rem;margin-top:4px">Spend a credit to pin an event to the top of discovery with a red highlight.</p>
       </div>
       <div style="text-align:right">
         <div style="font-size:2rem;font-weight:700;color:var(--live);font-family:var(--font-display)" id="creditCount">${credits}</div>
@@ -46,13 +48,15 @@ if (!me) {
 
 async function loadEvents() {
   const { events } = await api("/api/events?action=mine");
+  allEvents = events || [];
+
   let streak = 0;
-  for (const e of events) { if (!e.lastReport) break; if (e.lastReport.score >= 70) streak++; else break; }
+  for (const e of allEvents) { if (!e.lastReport) break; if (e.lastReport.score >= 70) streak++; else break; }
   if (streak >= 3) $("hostBadges").innerHTML = `<span class="badge badge-streak">${streak}-event hot streak</span>`;
 
-  $("myEvents").innerHTML = events.length ? `
+  $("myEvents").innerHTML = allEvents.length ? `
     <table class="tbl"><thead><tr><th>Event</th><th>Starts</th><th>Len</th><th>Views</th><th>Status</th><th></th></tr></thead><tbody>
-    ${events.map((e) => `<tr>
+    ${allEvents.map((e) => `<tr>
       <td><b>${esc(e.title)}</b><br><span style="color:var(--muted);font-size:.8rem">${esc(e.scenario)} &middot; code ${esc(e.joinCode)}</span></td>
       <td>${fmtLocal(e.startsAt)}</td><td>${e.durationMin}m</td><td>${e.views}</td>
       <td>${e.live ? `<span class="badge badge-live">Live</span>` : e.ended ? `<span class="badge">Ended</span>` : `<span class="badge badge-boost">Upcoming</span>`}</td>
@@ -80,20 +84,77 @@ async function loadEvents() {
       } catch (e) { say(e.message); }
     }
     if (rep) {
-      const cached = events.find((e) => e.id === rep.dataset.report)?.lastReport;
-      $("reportLoading").hidden = false;
-      renderRadar($("reportRadar"), [{ title: "Pulling data", scenario: "ER:LC API", live: true }]);
-      $("reportOut").innerHTML = "";
-      try {
-        const d = await api(`/api/erlc?action=report&eventId=${encodeURIComponent(rep.dataset.report)}`, { method: "POST" });
-        renderReport($("reportOut"), d.report);
-        $("reportOut").scrollIntoView({ behavior: "smooth" });
-      } catch (e) {
-        if (cached) { renderReport($("reportOut"), cached); say("Live pull failed (" + e.message + ") - showing the last saved report.", false); }
-        else say(e.message);
-      } finally { $("reportLoading").hidden = true; }
+      await generateReport(rep.dataset.report);
     }
   };
+
+  renderReportHistory(allEvents);
+}
+
+async function generateReport(eventId) {
+  const cached = allEvents.find((e) => e.id === eventId)?.lastReport;
+  $("reportLoading").hidden = false;
+  renderRadar($("reportRadar"), [{ title: "Pulling data", scenario: "ER:LC API", live: true }]);
+  $("reportOut").innerHTML = "";
+  try {
+    const d = await api(`/api/erlc?action=report&eventId=${encodeURIComponent(eventId)}`, { method: "POST" });
+    renderReport($("reportOut"), d.report);
+    $("reportOut").scrollIntoView({ behavior: "smooth" });
+  } catch (e) {
+    if (cached) { renderReport($("reportOut"), cached); say("Live pull failed (" + e.message + ") - showing the last saved report.", false); }
+    else say(e.message);
+  } finally { $("reportLoading").hidden = true; }
+}
+
+function renderReportHistory(events) {
+  const host = $("reportHistory");
+  if (!host) return;
+
+  const withReports = events.filter((e) => e.lastReport).sort((a, b) => new Date(b.startsAt) - new Date(a.startsAt));
+
+  if (!withReports.length) {
+    host.innerHTML = `<p class="note" style="text-align:center;padding:20px 0">No reports generated yet. Run an event and click "Generate report" to see your data here.</p>`;
+    return;
+  }
+
+  host.innerHTML = `
+    <h3 style="margin-bottom:14px">Report history</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">
+      ${withReports.map((e) => {
+        const r = e.lastReport;
+        const score = r.score ?? 0;
+        const scoreCol = score >= 70 ? "#69d99c" : score >= 45 ? "#7fa8ff" : "#ff7a7a";
+        return `<div class="card report-history-card" data-event-id="${esc(e.id)}" style="cursor:pointer;background:rgba(255,255,255,.03);border:1px solid rgba(148,170,205,.12);backdrop-filter:blur(8px);transition:border-color .2s,transform .2s" onmouseover="this.style.borderColor='rgba(127,168,255,.35)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='rgba(148,170,205,.12)';this.style.transform=''">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <div style="min-width:0">
+              <div style="font-weight:600;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.title)}</div>
+              <div style="font-size:.78rem;color:var(--muted);margin-top:2px">${esc(r.scenario || "")} &middot; ${fmtLocal(e.startsAt)}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:1.3rem;font-weight:700;color:${scoreCol}">${score}</div>
+              <div style="font-size:.65rem;color:var(--muted)">score</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;margin-top:10px;font-size:.8rem;color:var(--muted)">
+            <span>${r.joinsInWindow ?? 0} joins</span>
+            <span>${r.peakConcurrent ?? 0} peak</span>
+            <span>${r.avgSessionMin ?? 0}m avg</span>
+          </div>
+          <div style="margin-top:8px;font-size:.72rem;color:var(--signal)">Click to view full report</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+
+  host.querySelectorAll(".report-history-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const eventId = card.dataset.eventId;
+      const ev = allEvents.find((e) => e.id === eventId);
+      if (!ev?.lastReport) return;
+      // Render the cached report in the report output area and scroll to it.
+      renderReport($("reportOut"), ev.lastReport);
+      $("reportOut").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
 }
 
 async function loadHeatmap() {
@@ -110,15 +171,15 @@ async function loadHeatmap() {
       ? `<p class="note">The heatmap lights up as events report. Run your first event to start the board.</p>`
       : `${accuracyNote}<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:40px repeat(24,1fr);gap:3px;min-width:600px;align-items:center">
         <div></div>${hours.map((h) => `<div style="font-size:.6rem;color:var(--faint);text-align:center">${String(h).padStart(2, "0")}</div>`).join("")}
-        ${grid.map((row, d) => `<div style="font-size:.72rem;color:var(--muted);font-weight:500">${days[d]}</div>${row.map((v, h) => {
+        ${grid.map((row, d) => `<div style="font-size:.72rem;color:var(--muted);font-weight:500">${days[d]}</div>${row.map((v) => {
           const intensity = v != null ? (0.12 + 0.88 * v / max) : 0;
           const bg = v != null ? `rgba(127,168,255,${intensity.toFixed(2)})` : "rgba(148,170,205,0.05)";
-          return `<div style="aspect-ratio:1;border-radius:3px;background:${bg}" title="${days[d]} ${String(h).padStart(2, "0")}:00 UTC${v != null ? ` &middot; avg ${v} joins` : ""}"></div>`;
+          return `<div style="aspect-ratio:1;border-radius:3px;background:${bg}"></div>`;
         }).join("")}`).join("")}
       </div><div style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.78rem;color:var(--muted)"><span>Fewer</span><div style="display:flex;gap:2px">${[0.1,0.25,0.45,0.65,0.85,1].map((v) => `<div style="width:14px;height:14px;border-radius:3px;background:rgba(127,168,255,${v})"></div>`).join("")}</div><span>More</span><span style="margin-left:auto;color:var(--faint)">UTC</span></div></div>`;
     if (rank < 1) {
       wrap.innerHTML = `<div class="locked"><div class="locked-inner">${inner}</div>
-        <div class="locked-overlay"><span class="lock-badge">Gatherly Pro</span><div class="lock-title">Best time to host</div><div class="lock-sub">See platform-wide busy hours so you schedule when players are online. Available on Gatherly Pro and Ultra.</div><a href="/pricing" class="btn btn-primary btn-sm">Unlock</a></div></div>`;
+        <div class="locked-overlay"><span class="lock-badge">Gatherly Pro</span><div class="lock-title">Best time to host</div><div class="lock-sub">See platform-wide busy hours so you schedule when players are online.</div><a href="/pricing" class="btn btn-primary btn-sm">Unlock</a></div></div>`;
     } else { wrap.innerHTML = inner; }
   } catch { wrap.innerHTML = `<p class="note">Heatmap unavailable right now.</p>`; }
 }
@@ -137,7 +198,7 @@ async function loadLiveSnapshot() {
         </div>${data.staffOnline ? `<p style="margin-top:10px;font-size:.85rem;color:var(--muted)">Staff online: <b style="color:var(--text)">${data.staffOnline}</b></p>` : ""}`;
     if (rank < 1) {
       wrap.innerHTML = `<div class="locked"><div class="locked-inner">${inner}</div>
-        <div class="locked-overlay"><span class="lock-badge">Gatherly Pro</span><div class="lock-title">Live server snapshot</div><div class="lock-sub">Watch your in-game player count, capacity, queue, and staff online in real time. Available on Gatherly Pro and Ultra.</div><a href="/pricing" class="btn btn-primary btn-sm">Unlock</a></div></div>`;
+        <div class="locked-overlay"><span class="lock-badge">Gatherly Pro</span><div class="lock-title">Live server snapshot</div><div class="lock-sub">Watch your in-game player count, capacity, queue, and staff online in real time.</div><a href="/pricing" class="btn btn-primary btn-sm">Unlock</a></div></div>`;
     } else { wrap.innerHTML = inner; }
   } catch { wrap.innerHTML = `<p class="note">Live snapshot unavailable.</p>`; }
 }
