@@ -1,465 +1,485 @@
-import { boot, api, esc, fmtLocal } from "/js/app.js";
+import { boot, api, esc, currentUser } from "/js/app.js";
 boot("/admin");
 
 const $ = (id) => document.getElementById(id);
-const gate = $("gate"), panel = $("panel");
-let me = null, chatTimer = null, openChatId = null;
+const show = (id) => { const e = $(id); if (e) e.style.display = ""; };
+const hide = (id) => { const e = $(id); if (e) e.style.display = "none"; };
 
-const flash = (el, text, ok = false) => {
-  if (!el) return;
-  el.innerHTML = `<div class="alert ${ok ? "alert-ok" : "alert-err"}">${esc(text)}</div>`;
-  if (ok) setTimeout(() => { if (el.firstChild) el.innerHTML = ""; }, 3500);
-};
+let me = null;
+let activeTab = "support";
+let ticketPollTimer = null;
+let openTicketCount = 0;
 
-init();
+/* ========================== INIT ========================== */
 async function init() {
-  try { me = await api("/api/admin?action=whoami"); showPanel(); }
-  catch { showGate(); }
-}
+  try {
+    const d = await api("/api/admin?action=whoami");
+    me = d;
+  } catch {
+    document.body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)">Access denied. <a href="/">Go home</a></div>`;
+    return;
+  }
 
-function showGate() {
-  panel.hidden = true;
-  gate.hidden = false;
-  gate.innerHTML = `
-    <h3>Staff access</h3>
-    <p style="margin:6px 0 16px">Enter an access code from an executive to unlock the control panel.</p>
-    <label class="field">Access code <input id="accessCode" autocomplete="off" placeholder="GATH-XXXX-XXXX"></label>
-    <button class="btn btn-primary btn-sm" id="redeemBtn">Redeem code</button>
-    <div id="gateMsg" style="margin-top:12px"></div>`;
-  $("redeemBtn").onclick = async () => {
-    const code = $("accessCode").value.trim();
-    if (!code) return flash($("gateMsg"), "Enter your access code first.");
-    try { await api("/api/admin?action=redeem-code", { method: "POST", body: { code } }); flash($("gateMsg"), "Access granted. Loading...", true); setTimeout(init, 700); }
-    catch (e) { flash($("gateMsg"), e.message); }
-  };
-}
+  // Show exec-only UI elements.
+  if (me.role === "executive") {
+    document.querySelectorAll(".exec-only").forEach((el) => el.style.removeProperty("display"));
+  }
 
-function showPanel() {
-  gate.hidden = true;
-  panel.hidden = false;
-  const exec = me.role === "executive";
-  $("role").textContent = `Signed in as ${me.username} (${me.role}). Every action is audit-logged.`;
-
-  panel.innerHTML = `
-    <div class="tabs" id="tabs">
-      <button data-tab="support" class="tab active">Support <span class="tab-badge" id="supBadge" hidden>0</span></button>
-      <button data-tab="users" class="tab">Users</button>
-      <button data-tab="events" class="tab">Events</button>
-      <button data-tab="announce" class="tab">Announcements</button>
-      <button data-tab="notify" class="tab">Notifications</button>
-      ${exec ? `<button data-tab="exec" class="tab">Executive</button>` : ""}
-      <button data-tab="audit" class="tab">Audit</button>
-    </div>
-    <div id="amsg"></div>
-
-    <div class="tabpane" data-pane="support">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-          <h3>Support tickets</h3>
-          <div class="filter-chips" id="supFilter"><button class="chip active" data-status="open">Open</button><button class="chip" data-status="closed">Closed</button></div>
-        </div>
-        <div id="ticketList" style="margin-top:14px"><p>Loading...</p></div>
-      </div>
-      <div class="card" id="chatPanel" hidden style="margin-top:18px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <h3 id="chatTitle">Chat</h3>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" id="assignTicket">Claim</button>
-            <button class="btn btn-ghost btn-sm" id="unassignTicket">Unclaim</button>
-            <button class="btn btn-ghost btn-sm" id="escalateTicket">Escalate</button>
-            <button class="btn btn-ghost btn-sm" id="closeTicket">Resolve</button>
-            <button class="btn btn-ghost btn-sm" id="backTickets">Back</button>
-          </div>
-        </div>
-        <div id="chatMessages" style="margin-top:14px;display:grid;gap:8px;max-height:420px;overflow-y:auto"></div>
-        <div style="margin-top:12px;display:flex;gap:8px"><input id="chatInput" placeholder="Type a reply, sent to the user's DM..." style="flex:1"><button class="btn btn-primary btn-sm" id="sendChat">Send</button></div>
-      </div>
-    </div>
-
-    <div class="tabpane" data-pane="users" hidden>
-      <div class="card">
-        <h3>Find a user</h3>
-        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-          <input id="userSearchInput" placeholder="Search by username or Discord ID..." style="flex:1;min-width:220px">
-          <button class="btn btn-primary btn-sm" id="userSearchBtn">Search</button>
-          <button class="btn btn-ghost btn-sm" id="userAllBtn">Show all</button>
-        </div>
-        <div id="userList" style="margin-top:14px"><p>Loading...</p></div>
-      </div>
-      <div class="card" id="userEditPanel" hidden style="margin-top:18px">
-        <div style="display:flex;justify-content:space-between;align-items:center"><h3>Edit: <span id="editUsername"></span></h3><button class="btn btn-ghost btn-sm" id="backUsers">Back</button></div>
-        <div id="userEditContent" style="margin-top:14px"></div>
-      </div>
-    </div>
-
-    <div class="tabpane" data-pane="events" hidden>
-      <div class="card"><h3>All events</h3><div id="eventList" style="margin-top:14px"><p>Loading...</p></div></div>
-    </div>
-
-    <div class="tabpane" data-pane="announce" hidden>
-      <div class="card">
-        <h3>Cycling announcement banner</h3>
-        <p style="font-size:.85rem;margin:6px 0 14px">Shows a glass banner across the top of every page. Multiple banners cycle every 10 seconds. Any admin can post one. Leave duration blank for no expiry.</p>
-        <label class="field">Message <input id="annText" maxlength="240" placeholder="Scheduled maintenance tonight at 9pm UTC"></label>
-        <div class="grid grid-2">
-          <label class="field">Duration in minutes <small>Blank = stays until removed</small><input id="annDuration" type="number" min="1" placeholder="e.g. 120"></label>
-          <label class="field">Link (optional) <small>Clicking the banner opens this</small><input id="annLink" placeholder="https://..."></label>
-        </div>
-        <button class="btn btn-primary btn-sm" id="annAdd">Post announcement</button>
-        <div id="annMsg" style="margin-top:10px"></div>
-        <div id="annList" style="margin-top:16px"></div>
-      </div>
-    </div>
-
-    <div class="tabpane" data-pane="notify" hidden>
-      <div class="card">
-        <h3>Server-wide notification</h3>
-        <p style="font-size:.85rem;margin:6px 0 14px">Shows a dismissable card in the bottom-right of the screen, once per visitor, until they close it. Use sparingly.</p>
-        <label class="field">Title <input id="notTitle" maxlength="80" placeholder="New feature: live player counts"></label>
-        <label class="field">Body <small>Optional</small><textarea id="notBody" rows="2" maxlength="300"></textarea></label>
-        <div class="grid grid-2">
-          <label class="field">Duration in minutes <small>Blank = stays until removed</small><input id="notDuration" type="number" min="1" placeholder="e.g. 1440"></label>
-          <label class="field">Link (optional)<input id="notLink" placeholder="https://..."></label>
-        </div>
-        <button class="btn btn-danger btn-sm" id="notAdd" style="border-color:rgba(255,120,120,0.5);color:#ff9a9a">Make a server-wide notification (Dangerous)</button>
-        <div id="notMsg" style="margin-top:10px"></div>
-        <div id="notList" style="margin-top:16px"></div>
-      </div>
-    </div>
-
-    ${exec ? `
-    <div class="tabpane" data-pane="exec" hidden>
-      <div class="card">
-        <h3>Access codes</h3>
-        <p style="font-size:.85rem;margin:6px 0 14px">Generate codes for new staff. Public redemption only ever grants admin; executive is set per-user in the Users tab.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" id="genAdmin">Generate admin code</button>
-          <button class="btn btn-ghost btn-sm" id="genExec">Generate executive code</button>
-        </div>
-        <div id="newCode" style="margin-top:12px;font-weight:600;color:var(--signal)"></div>
-        <div id="codeList" style="margin-top:14px"></div>
-      </div>
-      <div class="card" style="margin-top:18px">
-        <h3>Homepage text</h3>
-        <label class="field">Hero headline <input id="heroHeadline" placeholder="Fill every session. Then prove it worked."></label>
-        <label class="field">Hero subtitle <input id="heroSub" placeholder="ER:LC event advertising with post-event analytics."></label>
-        <button class="btn btn-primary btn-sm" id="saveContent">Save homepage text</button>
-        <div id="contentMsg" style="margin-top:10px"></div>
-      </div>
-    </div>` : ""}
-
-    <div class="tabpane" data-pane="audit" hidden>
-      <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3>Audit log</h3>
-      <div class="filter-chips" id="auditFilter"><button class="chip active" data-feed="all">All</button><button class="chip" data-feed="flagged">Watchdog flags</button></div></div>
-      <p style="font-size:.85rem;margin:6px 0 14px">Every staff action and any system error, with a plain-English diagnosis and fix for failures. Watchdog flags surface suspicious or rate-limit activity.</p><div id="auditList"><p>Loading...</p></div></div>
-    </div>`;
-
-  $("tabs").addEventListener("click", (e) => {
-    const btn = e.target.closest(".tab");
-    if (!btn) return;
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    btn.classList.add("active");
-    document.querySelectorAll(".tabpane").forEach((p) => p.hidden = true);
-    document.querySelector(`[data-pane="${btn.dataset.tab}"]`).hidden = false;
-    const map = { support: loadTickets, users: loadUsers, events: loadEvents, announce: loadAnnouncements, notify: loadNotifications, exec: loadExec, audit: loadAudit };
-    map[btn.dataset.tab]?.();
+  // Nav tabs.
+  document.querySelectorAll(".cr-tab").forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
 
-  loadTickets();
-  pollSupBadge();
-  wireUsers();
-  wireAnnounce();
-  wireNotify();
-  if (exec) wireExec();
+  switchTab("support");
 }
 
-function loadTickets(status = "open") {
-  const el = $("ticketList");
-  if (!el) return;
-  el.innerHTML = "<p>Loading...</p>";
-  api(`/api/tickets?action=list&status=${status}`).then(({ tickets }) => {
-    const dot = (t) => t.status === "closed" ? "#9aa4b2" : t.escalated ? "#ffcf5c" : t.assignedTo ? "#69d99c" : "#ff7a7a";
-    const label = (t) => t.escalated ? "Escalated" : t.assignedTo ? `Claimed by ${esc(t.assignedToName || "staff")}` : "Open";
-    el.innerHTML = tickets.length ? tickets.map((t) => `
-      <div class="row" style="cursor:pointer;padding:10px;border-bottom:1px solid var(--line);border-left:3px solid ${dot(t)};${t.escalated ? "background:rgba(255,207,92,.07)" : ""}" data-ticket="${esc(t.id)}">
-        <span>
-          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${dot(t)};margin-right:7px"></span>
-          <b>${esc(t.subject)}</b>
-          <span style="color:var(--muted);font-size:.8rem">@${esc(t.username)} &middot; ${esc(t.plan || "free")}</span>
-          ${t.escalated ? `<span class="badge" style="margin-left:6px;color:#ffcf5c;border-color:#ffcf5c">High urgency</span>` : ""}
-        </span>
-        <span style="color:var(--muted);font-size:.8rem">${label(t)} &middot; ${new Date(t.updatedAt).toLocaleDateString()}</span>
-      </div>`).join("") : "<p>No tickets here.</p>";
-    el.querySelectorAll("[data-ticket]").forEach((row) => row.onclick = () => openChat(row.dataset.ticket, tickets.find((t) => t.id === row.dataset.ticket)));
-  }).catch(() => { el.innerHTML = "<p>Failed to load.</p>"; });
+/* ========================== TABS ========================== */
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll(".cr-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".cr-panel").forEach((p) => p.style.display = p.dataset.panel === tab ? "" : "none");
+
+  clearInterval(ticketPollTimer);
+
+  if (tab === "support") { loadTickets(); ticketPollTimer = setInterval(loadTickets, 4000); }
+  if (tab === "users") loadUsers();
+  if (tab === "events") loadEvents();
+  if (tab === "announcements") loadAnnouncements();
+  if (tab === "notifications") { /* static form */ }
+  if (tab === "executive" && me.role === "executive") loadExec();
+  if (tab === "audit") loadAudit();
 }
 
-document.addEventListener("click", (e) => {
-  const chip = e.target.closest("#supFilter .chip");
-  if (!chip) return;
-  document.querySelectorAll("#supFilter .chip").forEach((c) => c.classList.remove("active"));
-  chip.classList.add("active");
-  loadTickets(chip.dataset.status);
-});
-
-function openChat(id, ticket) {
-  openChatId = id;
-  $("ticketList").closest(".card").hidden = true;
-  $("chatPanel").hidden = false;
-  $("chatTitle").textContent = ticket?.subject || "Ticket";
-  loadChat(id);
-  clearInterval(chatTimer);
-  chatTimer = setInterval(() => loadChat(id), 4000);
-  $("sendChat").onclick = async () => {
-    const text = $("chatInput").value.trim();
-    if (!text) return;
-    try { await api("/api/tickets?action=reply", { method: "POST", body: { id, message: text } }); $("chatInput").value = ""; loadChat(id); }
-    catch (e) { flash($("amsg"), e.message); }
-  };
-  $("closeTicket").onclick = async () => { try { await api("/api/tickets?action=close", { method: "POST", body: { id } }); flash($("amsg"), "Ticket resolved and the user notified.", true); backToTickets(); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
-  $("assignTicket").onclick = async () => { try { await api("/api/tickets?action=assign", { method: "POST", body: { id } }); flash($("amsg"), "Claimed by you.", true); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
-  $("unassignTicket").onclick = async () => { try { await api("/api/tickets?action=unassign", { method: "POST", body: { id } }); flash($("amsg"), "Unclaimed.", true); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
-  $("escalateTicket").onclick = async () => { try { await api("/api/tickets?action=escalate", { method: "POST", body: { id } }); flash($("amsg"), "Marked high urgency.", true); loadTickets(); } catch (e) { flash($("amsg"), e.message); } };
-  $("backTickets").onclick = backToTickets;
-}
-function backToTickets() { clearInterval(chatTimer); $("ticketList").closest(".card").hidden = false; $("chatPanel").hidden = true; }
-function loadChat(id) {
-  api(`/api/tickets?action=get&id=${id}`).then(({ ticket: t }) => {
-    const m = $("chatMessages");
-    if (!m) return;
-    m.innerHTML = t.messages.map((msg) => `
-      <div style="padding:8px 12px;border-radius:8px;background:${msg.from === "staff" ? "rgba(127,168,255,0.1)" : "rgba(255,255,255,0.04)"}">
-        <span style="font-size:.78rem;color:var(--muted)">${msg.from === "staff" ? "Staff" : "User"} &middot; ${new Date(msg.at).toLocaleTimeString()}</span>
-        <div style="margin-top:4px">${esc(msg.text)}</div></div>`).join("");
-    m.scrollTop = m.scrollHeight;
-  }).catch(() => {});
-}
-function pollSupBadge() {
-  api("/api/tickets?action=counts").then(({ open }) => {
-    const b = $("supBadge");
-    if (!b) return;
-    if (open > 0) { b.textContent = open; b.hidden = false; } else b.hidden = true;
-  }).catch(() => {});
-  setTimeout(pollSupBadge, 15000);
-}
-
-function wireUsers() {
-  $("userSearchBtn").onclick = async () => {
-    const q = $("userSearchInput").value.trim();
-    try { const { users } = await api(`/api/admin?action=users-search&q=${encodeURIComponent(q)}`); renderUserTable(users); } catch (e) { flash($("amsg"), e.message); }
-  };
-  $("userAllBtn").onclick = loadUsers;
-  $("userSearchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("userSearchBtn").click(); });
-  $("backUsers").onclick = () => { $("userEditPanel").hidden = true; };
-}
-function loadUsers() {
-  api("/api/admin?action=users").then(({ users }) => renderUserTable(users)).catch(() => { $("userList").innerHTML = "<p>Failed to load.</p>"; });
-}
-function renderUserTable(users) {
-  const el = $("userList");
-  el.innerHTML = users.length ? `
-    <table class="tbl"><thead><tr><th>User</th><th>Plan</th><th>Credits</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>
-    ${users.map((u) => `<tr>
-      <td><b>${esc(u.username)}</b></td><td>${esc(u.plan)}</td><td>${u.credits}</td>
-      <td>${u.role ? `<span class="badge">${esc(u.role)}</span>` : "-"}</td>
-      <td>${u.suspended ? `<span class="badge badge-bad">Suspended</span>` : u.supportBlacklisted ? `<span class="badge" style="color:#ffcf5c;border-color:#ffcf5c">Blacklisted</span>` : `<span class="badge badge-good">Active</span>`}</td>
-      <td><button class="btn btn-ghost btn-sm" data-edit="${esc(u.id)}" data-name="${esc(u.username)}">Edit</button></td>
-    </tr>`).join("")}</tbody></table>` : "<p>No users found.</p>";
-  el.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openUserEdit(b.dataset.edit, b.dataset.name));
-}
-async function openUserEdit(userId, username) {
-  $("userEditPanel").hidden = false;
-  $("editUsername").textContent = username;
-  $("userEditPanel").scrollIntoView({ behavior: "smooth" });
-  const c = $("userEditContent");
-  c.innerHTML = "<p>Loading...</p>";
-  const exec = me.role === "executive";
+/* ========================== SUPPORT ========================== */
+async function loadTickets() {
   try {
-    const { user: u } = await api(`/api/admin?action=user-get&id=${encodeURIComponent(userId)}`);
-    c.innerHTML = `
-      <div class="grid grid-2" style="gap:14px;margin-bottom:16px">
-        <div class="stat" style="padding:14px"><b>${u.credits}</b><span>Credits</span></div>
-        <div class="stat" style="padding:14px"><b>${esc(u.plan)}</b><span>Plan</span></div>
-      </div>
-      <div class="card" style="margin-bottom:12px">
-        <h4 style="margin-bottom:10px">Credits</h4>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-          <label class="field" style="margin:0;flex:1;min-width:120px">Amount<input id="creditAmt" type="number" min="0" placeholder="5"></label>
-          <button class="btn btn-primary btn-sm" id="addCredits">Add</button>
-          <button class="btn btn-ghost btn-sm" id="removeCredits">Remove</button>
-          <button class="btn btn-ghost btn-sm" id="setCredits">Set</button>
+    const d = await api("/api/tickets?action=list");
+    const tickets = d.tickets || [];
+    openTicketCount = tickets.filter((t) => t.status !== "closed").length;
+    const badge = $("supportBadge");
+    if (badge) { badge.textContent = openTicketCount || ""; badge.style.display = openTicketCount ? "" : "none"; }
+    renderTickets(tickets);
+  } catch {}
+}
+
+function renderTickets(tickets) {
+  const host = $("ticketList");
+  if (!host) return;
+  if (!tickets.length) { host.innerHTML = `<p style="color:var(--muted);padding:20px">No tickets yet.</p>`; return; }
+  host.innerHTML = tickets.map((t) => {
+    const statusColor = t.status === "closed" ? "var(--muted)" : t.escalated ? "var(--yellow,#ffcf5c)" : t.assignedTo ? "var(--green,#69d99c)" : "var(--red,#ff7a7a)";
+    const statusLabel = t.status === "closed" ? "Closed" : t.escalated ? "Escalated" : t.assignedTo ? `Claimed` : "Open";
+    return `<div class="card ticket-row" data-id="${esc(t.id)}" style="margin-bottom:10px;cursor:pointer;border-left:3px solid ${statusColor}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <strong>${esc(t.subject || "No subject")}</strong>
+          <div style="font-size:.82rem;color:var(--muted);margin-top:2px">${esc(t.username)} - ${esc(t.topic)} - ${esc(t.plan || "free")}</div>
         </div>
-        <div id="creditMsg" style="margin-top:8px"></div>
+        <span style="font-size:.78rem;color:${statusColor};white-space:nowrap">${statusLabel}</span>
       </div>
-      <div class="card" style="margin-bottom:12px">
-        <h4 style="margin-bottom:10px">Plan / Tier <small style="font-weight:400;color:var(--muted)">grants that tier's weekly credits automatically</small></h4>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select id="planSelect" style="flex:1;min-width:160px;padding:9px 12px;background:var(--ink);border:1px solid var(--line-strong);border-radius:8px;color:var(--text)">
-            <option value="free" ${u.plan === "free" ? "selected" : ""}>Gatherly (free)</option>
-            <option value="pro" ${u.plan === "pro" ? "selected" : ""}>Gatherly Pro</option>
-            <option value="ultra" ${u.plan === "ultra" ? "selected" : ""}>Gatherly Ultra</option>
-          </select>
-          <button class="btn btn-primary btn-sm" id="setPlanBtn">Apply plan</button>
-        </div>
-        <div id="planMsg" style="margin-top:8px"></div>
+    </div>`;
+  }).join("");
+  host.querySelectorAll(".ticket-row").forEach((row) => {
+    row.addEventListener("click", () => openTicket(row.dataset.id, tickets.find((t) => t.id === row.dataset.id)));
+  });
+}
+
+function openTicket(id, t) {
+  const host = $("ticketDetail");
+  if (!host || !t) return;
+  const msgs = (t.messages || []).map((m) => `
+    <div style="margin-bottom:10px;padding:10px 12px;background:${m.from === "staff" ? "var(--surface2,rgba(255,255,255,.06))" : "var(--surface)"};border-radius:8px">
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">${m.from === "staff" ? "Staff" : esc(t.username)} - ${new Date(m.at).toLocaleString()}</div>
+      <div>${esc(m.text)}</div>
+    </div>`).join("");
+
+  host.innerHTML = `
+    <div class="card" style="margin-top:16px">
+      <h3 style="margin-bottom:4px">${esc(t.subject)}</h3>
+      <div style="font-size:.82rem;color:var(--muted);margin-bottom:14px">${esc(t.username)} - ${esc(t.topic)} - Ticket <code>${esc(t.id)}</code></div>
+      <div style="max-height:340px;overflow-y:auto;margin-bottom:14px">${msgs || "<p style='color:var(--muted)'>No messages.</p>"}</div>
+      <textarea id="staffReply" class="input" rows="3" placeholder="Type your reply..." style="width:100%;margin-bottom:10px"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="sendStaffReply('${esc(id)}')">Send reply</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeTicket('${esc(id)}')">Close ticket</button>
       </div>
-      ${exec ? `
-      <div class="card" style="margin-bottom:12px">
-        <h4 style="margin-bottom:10px">Role <small style="font-weight:400;color:var(--muted)">executive only</small></h4>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select id="roleSelect" style="flex:1;min-width:160px;padding:9px 12px;background:var(--ink);border:1px solid var(--line-strong);border-radius:8px;color:var(--text)">
-            <option value="" ${!u.role ? "selected" : ""}>No role (regular user)</option>
-            <option value="admin" ${u.role === "admin" ? "selected" : ""}>Admin</option>
-            <option value="executive" ${u.role === "executive" ? "selected" : ""}>Executive</option>
-          </select>
-          <button class="btn btn-primary btn-sm" id="setRoleBtn">Apply role</button>
+      <div id="ticketMsg" style="margin-top:10px"></div>
+    </div>`;
+}
+
+window.sendStaffReply = async (id) => {
+  const text = $("staffReply")?.value?.trim();
+  const msg = $("ticketMsg");
+  if (!text) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter a reply first.</div>`; return; }
+  try {
+    await api(`/api/tickets?action=reply&id=${encodeURIComponent(id)}`, { method: "POST", body: { text } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Reply sent.</div>`;
+    if ($("staffReply")) $("staffReply").value = "";
+    loadTickets();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.closeTicket = async (id) => {
+  const msg = $("ticketMsg");
+  try {
+    await api(`/api/tickets?action=close&id=${encodeURIComponent(id)}`, { method: "POST" });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Ticket closed.</div>`;
+    loadTickets();
+    const host = $("ticketDetail");
+    if (host) host.innerHTML = "";
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+/* ========================== USERS ========================== */
+async function loadUsers(q = "") {
+  const host = $("userList");
+  if (!host) return;
+  host.innerHTML = `<p style="color:var(--muted)">Loading...</p>`;
+  try {
+    const d = await api(`/api/admin?action=users-search&q=${encodeURIComponent(q)}`);
+    const users = d.users || [];
+    if (!users.length) { host.innerHTML = `<p style="color:var(--muted)">No users found.</p>`; return; }
+    host.innerHTML = users.map((u) => `
+      <div class="card user-row" data-id="${esc(u.id)}" style="margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:12px">
+        ${u.avatar ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'">` : ""}
+        <div style="flex:1;min-width:0">
+          <strong>${esc(u.username)}</strong>
+          ${u.globalName && u.globalName !== u.username ? `<span style="color:var(--muted);font-size:.82rem"> (${esc(u.globalName)})</span>` : ""}
+          <div style="font-size:.78rem;color:var(--muted)">${esc(u.plan)} ${u.role ? "- " + esc(u.role) : ""} ${u.suspended ? "- SUSPENDED" : ""}</div>
         </div>
-        <div id="roleMsg" style="margin-top:8px"></div>
+        <span style="font-size:.8rem;color:var(--muted)">${u.credits} credits</span>
+      </div>`).join("");
+    host.querySelectorAll(".user-row").forEach((row) => {
+      row.addEventListener("click", () => openUser(row.dataset.id, users.find((u) => u.id === row.dataset.id)));
+    });
+  } catch (e) { host.innerHTML = `<p style="color:var(--red,#ff7a7a)">${esc(e.message)}</p>`; }
+}
+
+function openUser(id, u) {
+  const host = $("userDetail");
+  if (!host || !u) return;
+  const isExec = me.role === "executive";
+
+  host.innerHTML = `
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+        ${u.avatar ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png" style="width:52px;height:52px;border-radius:50%" onerror="this.style.display='none'">` : ""}
+        <div>
+          <h3 style="margin:0">${esc(u.username)}</h3>
+          ${u.globalName && u.globalName !== u.username ? `<div style="color:var(--muted);font-size:.88rem">Display name: ${esc(u.globalName)}</div>` : ""}
+          <div style="font-size:.82rem;color:var(--muted)">Plan: ${esc(u.plan)} - Credits: ${u.credits} - Role: ${esc(u.role || "none")}</div>
+          <div style="font-size:.78rem;color:var(--muted);font-family:monospace">${esc(u.id)}</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+        <select id="editPlan" class="input" style="flex:1;min-width:140px">
+          <option value="free" ${u.plan === "free" ? "selected" : ""}>Gatherly (Free)</option>
+          <option value="pro" ${u.plan === "pro" ? "selected" : ""}>Gatherly Pro</option>
+          <option value="ultra" ${u.plan === "ultra" ? "selected" : ""}>Gatherly Ultra</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="setPlan('${esc(id)}')">Set plan</button>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <input id="creditAmt" type="number" min="0" class="input" placeholder="Credits" style="width:100px">
+        <button class="btn btn-ghost btn-sm" onclick="adjustCredits('${esc(id)}','credits-add')">Add</button>
+        <button class="btn btn-ghost btn-sm" onclick="adjustCredits('${esc(id)}','credits-remove')">Remove</button>
+        <button class="btn btn-ghost btn-sm" onclick="adjustCredits('${esc(id)}','credits-set')">Set</button>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn btn-ghost btn-sm" onclick="toggleSuspend('${esc(id)}',${!u.suspended})">${u.suspended ? "Unsuspend" : "Suspend"}</button>
+        <button class="btn btn-ghost btn-sm" onclick="wipeListings('${esc(id)}')">Wipe listings</button>
+        ${u.supportBlacklisted
+          ? `<button class="btn btn-ghost btn-sm" onclick="removeBlacklist('${esc(id)}')">Remove blacklist</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="addBlacklist('${esc(id)}')">Blacklist support</button>`}
+      </div>
+
+      ${isExec ? `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <select id="editRole" class="input" style="flex:1;min-width:140px">
+          <option value="" ${!u.role ? "selected" : ""}>No role</option>
+          <option value="admin" ${u.role === "admin" ? "selected" : ""}>Admin</option>
+          <option value="executive" ${u.role === "executive" ? "selected" : ""}>Executive</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="setRole('${esc(id)}')">Set role</button>
+      </div>
+      <div style="margin-bottom:10px">
+        <button class="btn btn-sm" style="background:var(--red,#ff7a7a);color:#fff" onclick="deleteAccount('${esc(id)}','${esc(u.username)}')">Delete account</button>
       </div>` : ""}
-      <div class="card">
-        <h4 style="margin-bottom:10px">Moderation</h4>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" id="suspendBtn">${u.suspended ? "Unsuspend" : "Suspend"}</button>
-          <button class="btn btn-ghost btn-sm" id="blacklistBtn">${u.supportBlacklisted ? "Remove support blacklist" : "Blacklist from support"}</button>
-          <button class="btn btn-danger btn-sm" id="wipeBtn">Wipe all their listings</button>
+
+      <div id="userMsg" style="margin-top:10px"></div>
+    </div>`;
+}
+
+window.setPlan = async (id) => {
+  const plan = $("editPlan")?.value;
+  const msg = $("userMsg");
+  try {
+    await api("/api/admin?action=set-plan", { method: "POST", body: { userId: id, plan } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Plan updated to ${esc(plan)}.</div>`;
+    loadUsers();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.adjustCredits = async (id, action) => {
+  const amount = parseInt($("creditAmt")?.value, 10);
+  const msg = $("userMsg");
+  if (!Number.isFinite(amount)) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter a valid number.</div>`; return; }
+  try {
+    const d = await api(`/api/admin?action=${action}`, { method: "POST", body: { userId: id, amount } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Credits updated. New total: ${d.credits}</div>`;
+    loadUsers();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.toggleSuspend = async (id, suspend) => {
+  const reason = suspend ? (prompt("Reason for suspension (optional):") || "") : "";
+  const msg = $("userMsg");
+  try {
+    await api("/api/admin?action=suspend", { method: "POST", body: { userId: id, suspended: suspend, reason } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">${suspend ? "Suspended" : "Unsuspended"}.</div>`;
+    loadUsers();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.wipeListings = async (id) => {
+  if (!confirm("Wipe all event listings for this user? This cannot be undone.")) return;
+  const msg = $("userMsg");
+  try {
+    const d = await api("/api/admin?action=wipe-listings", { method: "POST", body: { userId: id } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">${d.removed} listing(s) removed.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.addBlacklist = async (id) => {
+  const reason = prompt("Reason for support blacklist:");
+  if (!reason) return;
+  const msg = $("userMsg");
+  try {
+    await api("/api/admin?action=blacklist-add", { method: "POST", body: { userId: id, reason } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">User blacklisted from support.</div>`;
+    loadUsers();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.removeBlacklist = async (id) => {
+  const msg = $("userMsg");
+  try {
+    await api("/api/admin?action=blacklist-remove", { method: "POST", body: { userId: id } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Blacklist removed.</div>`;
+    loadUsers();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.setRole = async (id) => {
+  const role = $("editRole")?.value || null;
+  const msg = $("userMsg");
+  try {
+    await api("/api/admin?action=set-role", { method: "POST", body: { userId: id, role } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Role updated.</div>`;
+    loadUsers();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.deleteAccount = async (id, username) => {
+  if (!confirm(`Permanently delete the account for "${username}"? This will also wipe all their event listings and cannot be undone.`)) return;
+  if (!confirm(`Are you absolutely sure? This action is irreversible.`)) return;
+  const msg = $("userMsg");
+  try {
+    const d = await api("/api/admin?action=delete-account", { method: "POST", body: { userId: id } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Account deleted. ${d.eventsRemoved} event(s) removed.</div>`;
+    const host = $("userDetail");
+    if (host) host.innerHTML = "";
+    loadUsers();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+/* ========================== EVENTS ========================== */
+async function loadEvents() {
+  const host = $("eventList");
+  if (!host) return;
+  host.innerHTML = `<p style="color:var(--muted)">Loading...</p>`;
+  try {
+    const d = await api("/api/admin?action=events");
+    const events = d.events || [];
+    if (!events.length) { host.innerHTML = `<p style="color:var(--muted)">No events.</p>`; return; }
+    host.innerHTML = events.map((ev) => `
+      <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <strong>${esc(ev.title)}</strong>
+          <div style="font-size:.8rem;color:var(--muted)">${esc(ev.scenario || "")} - ${new Date(ev.startsAt).toLocaleString()} ${ev.boosted ? "- BOOSTED" : ""}</div>
         </div>
-        ${u.supportBlacklisted && u.blacklistReason ? `<p class="note" style="margin-top:8px">Blacklist reason: ${esc(u.blacklistReason)}</p>` : ""}
-        <div id="actionMsg" style="margin-top:8px"></div>
-      </div>`;
-
-    const num = () => $("creditAmt").value;
-    $("addCredits").onclick = async () => { try { const d = await api("/api/admin?action=credits-add", { method: "POST", body: { userId, amount: num() } }); flash($("creditMsg"), `Added. New total: ${d.credits}`, true); } catch (e) { flash($("creditMsg"), e.message); } };
-    $("removeCredits").onclick = async () => { try { const d = await api("/api/admin?action=credits-remove", { method: "POST", body: { userId, amount: num() } }); flash($("creditMsg"), `Removed. New total: ${d.credits}`, true); } catch (e) { flash($("creditMsg"), e.message); } };
-    $("setCredits").onclick = async () => { try { const d = await api("/api/admin?action=credits-set", { method: "POST", body: { userId, amount: num() } }); flash($("creditMsg"), `Set to ${d.credits}`, true); } catch (e) { flash($("creditMsg"), e.message); } };
-    $("setPlanBtn").onclick = async () => { try { await api("/api/admin?action=set-plan", { method: "POST", body: { userId, plan: $("planSelect").value } }); flash($("planMsg"), "Plan applied and weekly credits granted.", true); } catch (e) { flash($("planMsg"), e.message); } };
-    if (exec) $("setRoleBtn").onclick = async () => { try { await api("/api/admin?action=set-role", { method: "POST", body: { userId, role: $("roleSelect").value || null } }); flash($("roleMsg"), "Role applied.", true); } catch (e) { flash($("roleMsg"), e.message); } };
-    $("suspendBtn").onclick = async () => { const suspend = !u.suspended; try { await api("/api/admin?action=suspend", { method: "POST", body: { userId, suspended: suspend } }); flash($("actionMsg"), suspend ? "User suspended." : "User unsuspended.", true); u.suspended = suspend; $("suspendBtn").textContent = suspend ? "Unsuspend" : "Suspend"; } catch (e) { flash($("actionMsg"), e.message); } };
-    $("wipeBtn").onclick = async () => { if (!confirm("Delete every listing this user has? Cannot be undone.")) return; try { const d = await api("/api/admin?action=wipe-listings", { method: "POST", body: { userId } }); flash($("actionMsg"), `Removed ${d.removed} listing(s).`, true); } catch (e) { flash($("actionMsg"), e.message); } };
-    $("blacklistBtn").onclick = async () => {
-      if (u.supportBlacklisted) {
-        try { await api("/api/admin?action=blacklist-remove", { method: "POST", body: { userId } }); flash($("actionMsg"), "Support blacklist removed.", true); u.supportBlacklisted = false; $("blacklistBtn").textContent = "Blacklist from support"; } catch (e) { flash($("actionMsg"), e.message); }
-      } else {
-        const reason = prompt("Reason for blacklisting this user from support?", "Abuse of the support system");
-        if (reason === null) return;
-        try { const d = await api("/api/admin?action=blacklist-add", { method: "POST", body: { userId, reason } }); flash($("actionMsg"), `Blacklisted.${d.discordRoleApplied ? " Discord role applied." : " (Discord role not applied, check bot permissions.)"}`, true); u.supportBlacklisted = true; $("blacklistBtn").textContent = "Remove support blacklist"; } catch (e) { flash($("actionMsg"), e.message); }
-      }
-    };
-  } catch (e) { c.innerHTML = `<p>${esc(e.message)}</p>`; }
-}
-
-function loadEvents() {
-  const el = $("eventList");
-  api("/api/admin?action=events").then(({ events }) => {
-    el.innerHTML = events.length ? `
-      <table class="tbl"><thead><tr><th>Event</th><th>Host</th><th>Starts</th><th>Boosted</th><th></th></tr></thead><tbody>
-      ${events.map((e) => {
-        const ended = Date.now() > new Date(e.startsAt).getTime() + (e.durationMin || 60) * 60000;
-        return `<tr>
-          <td><b>${esc(e.title)}</b><br><span style="font-size:.8rem;color:var(--muted)">${esc(e.scenario)}</span></td>
-          <td>${esc(e.hostUsername)}</td><td>${fmtLocal(e.startsAt)}</td>
-          <td>${e.boosted ? `<span class="badge badge-boost">Boosted</span>` : "-"}</td>
-          <td style="white-space:nowrap">
-            <button class="btn btn-ghost btn-sm" data-boost="${esc(e.id)}">${e.boosted ? "Unboost" : "Boost"}</button>
-            ${!ended ? `<button class="btn btn-ghost btn-sm" data-end="${esc(e.id)}">End now</button>` : ""}
-            <button class="btn btn-danger btn-sm" data-del="${esc(e.id)}">Delete</button>
-          </td></tr>`;
-      }).join("")}</tbody></table>` : "<p>No events.</p>";
-    el.querySelectorAll("[data-boost]").forEach((b) => b.onclick = async () => { try { await api("/api/admin?action=boost", { method: "POST", body: { id: b.dataset.boost } }); loadEvents(); } catch (e) { flash($("amsg"), e.message); } });
-    el.querySelectorAll("[data-end]").forEach((b) => b.onclick = async () => { if (!confirm("End now?")) return; try { await api("/api/admin?action=end-event", { method: "POST", body: { id: b.dataset.end } }); loadEvents(); } catch (e) { flash($("amsg"), e.message); } });
-    el.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => { if (!confirm("Delete permanently?")) return; try { await api("/api/admin?action=delete-event", { method: "POST", body: { id: b.dataset.del } }); loadEvents(); } catch (e) { flash($("amsg"), e.message); } });
-  }).catch(() => { el.innerHTML = "<p>Failed to load.</p>"; });
-}
-
-function wireAnnounce() {
-  $("annAdd").onclick = async () => {
-    const text = $("annText").value.trim();
-    if (!text) return flash($("annMsg"), "Enter the announcement text.");
-    try { await api("/api/admin?action=announce-add", { method: "POST", body: { text, durationMin: $("annDuration").value, link: $("annLink").value.trim() } }); flash($("annMsg"), "Posted.", true); $("annText").value = ""; $("annDuration").value = ""; $("annLink").value = ""; loadAnnouncements(); } catch (e) { flash($("annMsg"), e.message); }
-  };
-}
-function loadAnnouncements() {
-  api("/api/admin?action=announce-list").then(({ announcements }) => {
-    const el = $("annList");
-    el.innerHTML = announcements.length ? announcements.map((a) => `
-      <div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">
-        <span>${esc(a.text)} ${a.expiresAt ? `<span style="color:var(--muted);font-size:.78rem">until ${new Date(a.expiresAt).toLocaleString()}</span>` : `<span style="color:var(--muted);font-size:.78rem">no expiry</span>`}</span>
-        <button class="btn btn-danger btn-sm" data-rm="${esc(a.id)}">Remove</button>
-      </div>`).join("") : "<p class='note'>No active announcements.</p>";
-    el.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => { try { await api("/api/admin?action=announce-remove", { method: "POST", body: { id: b.dataset.rm } }); loadAnnouncements(); } catch (e) { flash($("annMsg"), e.message); } });
-  }).catch(() => {});
-}
-
-function wireNotify() {
-  $("notAdd").onclick = async () => {
-    const title = $("notTitle").value.trim();
-    if (!title) return flash($("notMsg"), "Enter a title.");
-    if (!confirm("This shows a notification to every visitor of the site. Continue?")) return;
-    try { await api("/api/admin?action=notify-add", { method: "POST", body: { title, body: $("notBody").value.trim(), durationMin: $("notDuration").value, link: $("notLink").value.trim() } }); flash($("notMsg"), "Notification live.", true); $("notTitle").value = ""; $("notBody").value = ""; $("notDuration").value = ""; $("notLink").value = ""; loadNotifications(); } catch (e) { flash($("notMsg"), e.message); }
-  };
-}
-function loadNotifications() {
-  api("/api/admin?action=content").then(({ content }) => {
-    const list = content.notifications || [];
-    const el = $("notList");
-    el.innerHTML = list.length ? list.map((n) => `
-      <div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">
-        <span><b>${esc(n.title)}</b> ${n.body ? `<span style="color:var(--muted);font-size:.8rem">${esc(n.body)}</span>` : ""}</span>
-        <button class="btn btn-danger btn-sm" data-rmn="${esc(n.id)}">Remove</button>
-      </div>`).join("") : "<p class='note'>No active notifications.</p>";
-    el.querySelectorAll("[data-rmn]").forEach((b) => b.onclick = async () => { try { await api("/api/admin?action=notify-remove", { method: "POST", body: { id: b.dataset.rmn } }); loadNotifications(); } catch (e) { flash($("notMsg"), e.message); } });
-  }).catch(() => {});
-}
-
-function wireExec() {
-  $("genAdmin").onclick = async () => { try { const d = await api("/api/admin?action=gen-code", { method: "POST", body: { role: "admin" } }); $("newCode").textContent = `Admin code: ${d.code}`; loadExec(); } catch (e) { flash($("amsg"), e.message); } };
-  $("genExec").onclick = async () => { try { const d = await api("/api/admin?action=gen-code", { method: "POST", body: { role: "executive" } }); $("newCode").textContent = `Executive code: ${d.code}`; loadExec(); } catch (e) { flash($("amsg"), e.message); } };
-  $("saveContent").onclick = async () => { try { await api("/api/admin?action=set-content", { method: "POST", body: { heroHeadline: $("heroHeadline").value, heroSub: $("heroSub").value } }); flash($("contentMsg"), "Saved.", true); } catch (e) { flash($("contentMsg"), e.message); } };
-  api("/api/admin?action=content").then(({ content }) => { if (content.heroHeadline) $("heroHeadline").value = content.heroHeadline; if (content.heroSub) $("heroSub").value = content.heroSub; }).catch(() => {});
-}
-function loadExec() {
-  api("/api/admin?action=codes").then(({ codes }) => {
-    const el = $("codeList");
-    el.innerHTML = codes.length ? codes.map((c) => `
-      <div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">
-        <code style="color:var(--signal)">${esc(c.code)}</code>
-        <span style="color:var(--muted);font-size:.8rem">${esc(c.role)} &middot; ${c.redemptions?.length || 0} uses &middot; ${c.revoked ? "revoked" : "active"}</span>
-        ${!c.revoked ? `<button class="btn btn-danger btn-sm" data-revoke="${esc(c.code)}">Revoke</button>` : ""}
-      </div>`).join("") : "<p class='note'>No codes yet.</p>";
-    el.querySelectorAll("[data-revoke]").forEach((b) => b.onclick = async () => { try { await api("/api/admin?action=revoke-code", { method: "POST", body: { code: b.dataset.revoke } }); loadExec(); } catch (e) { flash($("amsg"), e.message); } });
-  }).catch(() => {});
-}
-
-document.addEventListener("click", (e) => {
-  const chip = e.target.closest("#auditFilter .chip");
-  if (!chip) return;
-  document.querySelectorAll("#auditFilter .chip").forEach((c) => c.classList.remove("active"));
-  chip.classList.add("active");
-  loadAudit(chip.dataset.feed);
-});
-
-function loadAudit(feed = "all") {
-  const el = $("auditList");
-  const action = feed === "flagged" ? "flagged" : "audit";
-  api(`/api/admin?action=${action}`).then(({ entries }) => {
-    el.innerHTML = entries.length ? entries.map((e) => {
-      const flagged = e.level === "warn" || e.detail?.watchdog;
-      const isErr = e.level === "error" || e.detail?.error;
-      const accent = flagged ? "#ffcf5c" : isErr ? "var(--bad)" : "var(--text)";
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
-        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <span><code style="font-size:.82rem;color:${accent}">${esc(e.action)}</code> <span style="color:var(--muted);font-size:.8rem">by ${esc(e.actor?.username || "system")}</span></span>
-          <span style="color:var(--faint);font-size:.78rem">${new Date(e.at).toLocaleString()}</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="adminBoost('${esc(ev.id)}',this)">${ev.boosted ? "Unboost" : "Boost"}</button>
+          <button class="btn btn-ghost btn-sm" onclick="adminEndEvent('${esc(ev.id)}')">End</button>
+          <button class="btn btn-sm" style="background:var(--red,#ff7a7a);color:#fff" onclick="adminDeleteEvent('${esc(ev.id)}')">Delete</button>
         </div>
-        ${flagged && e.detail ? `<div style="margin-top:6px;background:rgba(255,207,92,0.07);border:1px solid rgba(255,207,92,0.3);border-radius:8px;padding:8px 12px">
-          ${e.detail.what ? `<div style="color:#ffcf5c;font-size:.82rem"><b>What:</b> ${esc(e.detail.what)}</div>` : ""}
-          ${e.detail.risk ? `<div style="color:var(--muted);font-size:.82rem;margin-top:3px"><b>Risk:</b> ${esc(e.detail.risk)}</div>` : ""}
-        </div>` : ""}
-        ${isErr && e.detail ? `<div style="margin-top:6px;background:rgba(255,122,122,0.06);border:1px solid rgba(255,122,122,0.25);border-radius:8px;padding:8px 12px">
-          <div style="color:var(--bad);font-size:.82rem"><b>Error:</b> ${esc(e.detail.error)}</div>
-          ${e.detail.diagnosis ? `<div style="color:var(--muted);font-size:.82rem;margin-top:3px"><b>Cause:</b> ${esc(e.detail.diagnosis)}</div>` : ""}
-          ${e.detail.fix ? `<div style="color:var(--good);font-size:.82rem;margin-top:3px"><b>Fix:</b> ${esc(e.detail.fix)}</div>` : ""}
-        </div>` : ""}
-      </div>`;
-    }).join("") : "<p>No entries yet.</p>";
-  }).catch(() => { el.innerHTML = "<p>Failed to load.</p>"; });
+      </div>`).join("");
+  } catch (e) { host.innerHTML = `<p style="color:var(--red,#ff7a7a)">${esc(e.message)}</p>`; }
 }
+
+window.adminBoost = async (id, btn) => {
+  try {
+    const d = await api("/api/admin?action=boost", { method: "POST", body: { id } });
+    btn.textContent = d.boosted ? "Unboost" : "Boost";
+  } catch (e) { alert(e.message); }
+};
+
+window.adminEndEvent = async (id) => {
+  if (!confirm("Force-end this event?")) return;
+  try { await api("/api/admin?action=end-event", { method: "POST", body: { id } }); loadEvents(); }
+  catch (e) { alert(e.message); }
+};
+
+window.adminDeleteEvent = async (id) => {
+  if (!confirm("Permanently delete this event?")) return;
+  try { await api("/api/admin?action=delete-event", { method: "POST", body: { id } }); loadEvents(); }
+  catch (e) { alert(e.message); }
+};
+
+/* ========================== ANNOUNCEMENTS ========================== */
+async function loadAnnouncements() {
+  const host = $("announceList");
+  if (!host) return;
+  try {
+    const d = await api("/api/admin?action=announce-list");
+    const items = d.announcements || [];
+    host.innerHTML = items.length
+      ? items.map((a) => `
+        <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px">
+          <div style="flex:1">${esc(a.text)} ${a.link ? `<a href="${esc(a.link)}" target="_blank" style="font-size:.8rem">Link</a>` : ""}</div>
+          <button class="btn btn-ghost btn-sm" onclick="removeAnnounce('${esc(a.id)}')">Remove</button>
+        </div>`).join("")
+      : `<p style="color:var(--muted)">No active announcements.</p>`;
+  } catch {}
+}
+
+window.addAnnounce = async () => {
+  const text = $("announceText")?.value?.trim();
+  const link = $("announceLink")?.value?.trim();
+  const durationMin = $("announceDuration")?.value;
+  const msg = $("announceMsg");
+  if (!text) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter announcement text.</div>`; return; }
+  try {
+    await api("/api/admin?action=announce-add", { method: "POST", body: { text, link, durationMin } });
+    if ($("announceText")) $("announceText").value = "";
+    if ($("announceLink")) $("announceLink").value = "";
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Announcement added.</div>`;
+    loadAnnouncements();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.removeAnnounce = async (id) => {
+  try { await api("/api/admin?action=announce-remove", { method: "POST", body: { id } }); loadAnnouncements(); }
+  catch (e) { alert(e.message); }
+};
+
+/* ========================== NOTIFICATIONS ========================== */
+window.addNotification = async () => {
+  const title = $("notifyTitle")?.value?.trim();
+  const body = $("notifyBody")?.value?.trim();
+  const link = $("notifyLink")?.value?.trim();
+  const durationMin = $("notifyDuration")?.value;
+  const msg = $("notifyMsg");
+  if (!title) { if (msg) msg.innerHTML = `<div class="alert alert-err">Title is required.</div>`; return; }
+  if (!confirm("Send this notification to all users?")) return;
+  try {
+    await api("/api/admin?action=notify-add", { method: "POST", body: { title, body, link, durationMin } });
+    if ($("notifyTitle")) $("notifyTitle").value = "";
+    if ($("notifyBody")) $("notifyBody").value = "";
+    if ($("notifyLink")) $("notifyLink").value = "";
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Notification sent to all users.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+/* ========================== EXECUTIVE ========================== */
+async function loadExec() {
+  if (me.role !== "executive") return;
+  try {
+    const d = await api("/api/admin?action=codes");
+    const codes = d.codes || [];
+    const host = $("codeList");
+    if (host) {
+      host.innerHTML = codes.length
+        ? codes.map((c) => `
+          <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px">
+            <code style="flex:1;font-size:.82rem">${esc(c.code)}</code>
+            <span style="font-size:.78rem;color:var(--muted)">${esc(c.role)} ${c.revoked ? "- REVOKED" : ""}</span>
+            ${!c.revoked ? `<button class="btn btn-ghost btn-sm" onclick="revokeCode('${esc(c.code)}')">Revoke</button>` : ""}
+          </div>`).join("")
+        : `<p style="color:var(--muted)">No codes generated yet.</p>`;
+    }
+  } catch {}
+
+  try {
+    const d = await api("/api/admin?action=content");
+    const content = d.content || {};
+    if ($("heroHeadline")) $("heroHeadline").value = content.heroHeadline || "";
+    if ($("heroSub")) $("heroSub").value = content.heroSub || "";
+  } catch {}
+}
+
+window.genCode = async (role) => {
+  const msg = $("execMsg");
+  try {
+    const d = await api("/api/admin?action=gen-code", { method: "POST", body: { role } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Code generated: <code>${esc(d.code)}</code></div>`;
+    loadExec();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.revokeCode = async (code) => {
+  if (!confirm(`Revoke code ${code}?`)) return;
+  const msg = $("execMsg");
+  try {
+    await api("/api/admin?action=revoke-code", { method: "POST", body: { code } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Code revoked.</div>`;
+    loadExec();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.saveContent = async () => {
+  const heroHeadline = $("heroHeadline")?.value?.trim();
+  const heroSub = $("heroSub")?.value?.trim();
+  const msg = $("execMsg");
+  try {
+    await api("/api/admin?action=set-content", { method: "POST", body: { heroHeadline, heroSub } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Homepage content updated.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+/* ========================== AUDIT LOG ========================== */
+async function loadAudit() {
+  const host = $("auditList");
+  if (!host) return;
+  host.innerHTML = `<p style="color:var(--muted)">Loading...</p>`;
+  try {
+    const d = await api("/api/admin?action=audit");
+    const entries = d.entries || [];
+    if (!entries.length) { host.innerHTML = `<p style="color:var(--muted)">No audit entries.</p>`; return; }
+    host.innerHTML = entries.map((e) => `
+      <div class="card" style="margin-bottom:6px;font-size:.82rem;border-left:3px solid ${e.level === "warn" ? "var(--yellow,#ffcf5c)" : e.level === "error" ? "var(--red,#ff7a7a)" : "var(--border)"}">
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <strong>${esc(e.action)}</strong>
+          <span style="color:var(--muted)">${new Date(e.at).toLocaleString()}</span>
+        </div>
+        <div style="color:var(--muted);margin-top:2px">${esc(e.actor?.username || "system")} ${e.detail?.targetId ? "- target: " + esc(e.detail.targetId) : ""}</div>
+        ${e.detail?.diagnosis ? `<div style="margin-top:4px;color:var(--yellow,#ffcf5c)">${esc(e.detail.diagnosis)}</div>` : ""}
+        ${e.detail?.fix ? `<div style="color:var(--muted)">${esc(e.detail.fix)}</div>` : ""}
+      </div>`).join("");
+  } catch (e) { host.innerHTML = `<p style="color:var(--red,#ff7a7a)">${esc(e.message)}</p>`; }
+}
+
+/* ========================== USER SEARCH ========================== */
+const searchInput = $("userSearch");
+if (searchInput) {
+  let debounce;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => loadUsers(searchInput.value), 300);
+  });
+}
+
+init();
