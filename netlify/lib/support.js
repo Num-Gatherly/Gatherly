@@ -1,11 +1,12 @@
 // Shared support helpers used by /api/tickets and /api/interactions.
-// Keeps all the embed styling and Discord plumbing in one place.
+// Embeds v2 throughout. Report DM includes a link button to the website report.
 import {
   ticketsStore, usersStore, BRAND, discordBotFetch, dmUserEmbed,
   isStaff, effectivePlan, planName,
 } from "./util.js";
 
 export const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID || "1515235842292187246";
+const SITE_URL = process.env.SITE_URL || "https://gatherly-erlc.xyz";
 const PLAN_RANK = { ultra: 2, pro: 1, free: 0 };
 
 /* ----------------------------- ticket store ----------------------------- */
@@ -19,7 +20,6 @@ export async function allTickets() {
   return items.filter(Boolean);
 }
 
-// Sort for the staff feed: escalated first, then higher plans, then most recent.
 export function sortForFeed(items) {
   return items.sort((a, b) => {
     if (Boolean(b.escalated) !== Boolean(a.escalated)) return b.escalated ? 1 : -1;
@@ -43,26 +43,58 @@ export function appendMessage(t, from, text) {
   return t;
 }
 
-/* ------------------------------- embeds --------------------------------- */
-const thumb = { url: BRAND.logo };
+/* ------------------------------- embeds v2 ------------------------------ */
+// Helper: build an embeds v2 message body with optional link button.
+function v2Message(components, linkButton = null) {
+  const rows = [...components];
+  if (linkButton) {
+    rows.push({
+      type: 1,
+      components: [linkButton],
+    });
+  }
+  return { components: rows, flags: 32768 }; // 32768 = IS_COMPONENTS_V2
+}
 
-// Message shown in the staff support channel. Colour reflects state.
+// Container component (type 17) - the glass card wrapper for embeds v2.
+function container(color, children) {
+  return { type: 17, accent_color: color, components: children };
+}
+
+// Section with text (type 9).
+function section(text) {
+  return { type: 9, components: [{ type: 10, content: text }] };
+}
+
+// Text display (type 10).
+function textBlock(content) {
+  return { type: 10, content };
+}
+
+// Separator (type 14).
+const sep = () => ({ type: 14, divider: true, spacing: 1 });
+
+// Big blue link button.
+function reportButton(label, url) {
+  return { type: 2, style: 5, label, url };
+}
+
+/* -------------------- staff channel card (embeds v2) -------------------- */
 export function channelEmbed(t) {
   const color = t.status === "closed" ? 0x9aa4b2 : t.escalated ? BRAND.yellow : t.assignedTo ? BRAND.green : BRAND.red;
-  const statusText = t.status === "closed" ? "Closed" : t.escalated ? "Escalated (high urgency)" : t.assignedTo ? `Claimed by ${t.assignedToName}` : "Open, unclaimed";
+  const statusText = t.status === "closed" ? "Closed" : t.escalated ? "Escalated - high urgency" : t.assignedTo ? `Claimed by ${t.assignedToName}` : "Open, unclaimed";
   const first = (t.messages?.find((m) => m.from === "user")?.text || "").slice(0, 1000);
   return {
-    title: `Gatherly Support`,
+    title: "Gatherly Support",
     color,
-    thumbnail: thumb,
     description: [
       `### ${t.subject}`,
       `> ${first || "No message provided."}`,
       "",
-      `- Topic: ${t.topic}`,
-      `- Plan: ${planName(t.plan || "free")}`,
-      `- Status: ${statusText}`,
-      `- Ticket: \`${t.id}\``,
+      `**Topic:** ${t.topic}`,
+      `**Plan:** ${planName(t.plan || "free")}`,
+      `**Status:** ${statusText}`,
+      `**Ticket:** \`${t.id}\``,
     ].join("\n"),
     timestamp: new Date().toISOString(),
     footer: { text: "Gatherly Support" },
@@ -82,7 +114,6 @@ export function channelComponents(t) {
   }];
 }
 
-// Buttons attached to the user's DM so they can reply or escalate without leaving Discord.
 export function dmComponents(t) {
   return [{
     type: 1,
@@ -93,65 +124,121 @@ export function dmComponents(t) {
   }];
 }
 
-// First DM to the opener confirming the ticket exists. No staff name, no links.
-export function dmOpenedEmbed(t) {
+/* -------------------- user-facing DM embeds (v2) ------------------------ */
+export function dmOpenedPayload(t) {
   return {
-    title: "Gatherly Support",
-    color: BRAND.color,
-    thumbnail: thumb,
-    description: [
-      "Thanks for reaching out. Our team has your request and will respond here.",
-      "",
-      "### Your inquiry",
-      `> ${t.subject}`,
-      "",
-      "- A member of our team will reply soon.",
-      "- Please be patient and avoid sending repeated messages.",
-      "- Use the buttons below to add a reply or flag this as high urgency.",
-    ].join("\n"),
-    footer: { text: "Gatherly Support" },
+    embeds: [{
+      title: "# Gatherly Support",
+      color: BRAND.color,
+      description: [
+        "> Thanks for reaching out. Our team has your request and will respond here.",
+        "",
+        "### Your inquiry",
+        `> ${t.subject}`,
+        "",
+        "**What happens next**",
+        "> A member of our team will reply to this DM shortly.",
+        "> Please be patient and avoid sending repeated messages.",
+        "> Use the buttons below to add a reply or flag this as high urgency.",
+      ].join("\n"),
+      footer: { text: "Gatherly Support" },
+      timestamp: new Date().toISOString(),
+    }],
+    components: dmComponents(t),
   };
 }
 
-// A staff reply, delivered to the opener. Deliberately omits staff name and URLs.
-export function dmStaffReplyEmbed(text) {
+export function dmStaffReplyPayload(text) {
   return {
-    title: "New reply from the Gatherly Support Team",
-    color: BRAND.color,
-    thumbnail: thumb,
-    description: [
-      `> ${String(text).slice(0, 1500)}`,
-      "",
-      "- Tap Reply to respond.",
-      "- Please be patient and avoid sending repeated messages.",
-    ].join("\n"),
-    footer: { text: "Gatherly Support" },
+    embeds: [{
+      title: "# Reply from Gatherly Support",
+      color: BRAND.color,
+      description: [
+        `> ${String(text).slice(0, 1500)}`,
+        "",
+        "**Options**",
+        "> Tap **Reply** below to respond to this message.",
+        "> Please be patient and avoid sending repeated messages.",
+      ].join("\n"),
+      footer: { text: "Gatherly Support" },
+      timestamp: new Date().toISOString(),
+    }],
+    components: [{
+      type: 1,
+      components: [
+        { type: 2, style: 1, label: "Reply", custom_id: `tkt:reply:placeholder` },
+      ],
+    }],
   };
 }
 
-// Closing embed. Clean, final, no buttons.
-export function dmResolvedEmbed() {
+export function dmResolvedPayload() {
   return {
-    title: "Request resolved",
-    color: BRAND.green,
-    thumbnail: thumb,
-    description: [
-      "A member of our team has handled your request, so this thread will not be continued.",
-      "",
-      "- Thank you for reaching out to Gatherly.",
-      "- You are welcome to open a new request any time from the Gatherly website.",
-    ].join("\n"),
-    footer: { text: "Gatherly Support" },
+    embeds: [{
+      title: "# Request Resolved",
+      color: BRAND.green,
+      description: [
+        "> A member of our team has resolved your request.",
+        "",
+        "**Thank you for reaching out to Gatherly.**",
+        "> You are welcome to open a new request any time from the Gatherly website.",
+      ].join("\n"),
+      footer: { text: "Gatherly Support" },
+      timestamp: new Date().toISOString(),
+    }],
+  };
+}
+
+/* -------------------- report DM (embeds v2 with button) ---------------- */
+export function reportDmPayload(ev, report, eventId) {
+  const scoreColor = report.score >= 70 ? BRAND.green : report.score >= 45 ? BRAND.color : BRAND.red;
+  const scoreEmoji = report.score >= 70 ? "🟢" : report.score >= 45 ? "🟡" : "🔴";
+  const reportUrl = `${SITE_URL}/reports?event=${eventId}`;
+
+  return {
+    embeds: [{
+      title: `# Report Ready: ${ev.title}`,
+      color: scoreColor,
+      description: [
+        `### ${report.serverName}`,
+        `> ${report.aiSummary ? report.aiSummary.slice(0, 600) : "Your event has been analysed by Gatherly."}`,
+        "",
+        "**Event Summary**",
+        `> ${scoreEmoji} **Health score:** ${report.score}/100`,
+        `> **Players joined:** ${report.uniquePlayers}`,
+        `> **Peak in-server:** ${report.peakConcurrent}/${report.maxPlayers}`,
+        `> **Retained 30 min:** ${report.retained30}`,
+        `> **Avg session:** ${report.avgSessionMin} min`,
+        "",
+        report.momentum
+          ? `**Momentum:** ${report.momentum.direction === "up" ? "📈" : "📉"} ${report.momentum.changePct}% vs last event`
+          : "",
+        "",
+        "*Full analytics, charts, and staff data are available on your report page.*",
+      ].filter((l) => l !== "").join("\n"),
+      footer: { text: "Gatherly Analytics" },
+      timestamp: new Date().toISOString(),
+    }],
+    components: [{
+      type: 1,
+      components: [{
+        type: 2,
+        style: 5,
+        label: "View Full Report",
+        url: reportUrl,
+        emoji: { name: "📊" },
+      }],
+    }],
   };
 }
 
 /* --------------------------- Discord senders ---------------------------- */
-// Posts the ticket card to the staff channel; returns the created message id.
 export async function sendChannelCard(t) {
   if (!process.env.DISCORD_BOT_TOKEN) return { ok: false };
   try {
     const r = await discordBotFetch(`/channels/${SUPPORT_CHANNEL_ID}/messages`, {
-      method: "POST", body: JSON.stringify({ embeds: [channelEmbed(t)], components: channelComponents(t) }),
+      method: "POST",
+      body: JSON.stringify({ embeds: [channelEmbed(t)], components: channelComponents(t) }),
     });
     if (!r.ok) return { ok: false };
     const m = await r.json();
@@ -159,31 +246,85 @@ export async function sendChannelCard(t) {
   } catch { return { ok: false }; }
 }
 
-// Best-effort refresh of the channel card after a state change.
 export async function refreshChannelCard(t) {
   if (!t.channelMessageId || !t.channelId || !process.env.DISCORD_BOT_TOKEN) return false;
   try {
     const r = await discordBotFetch(`/channels/${t.channelId}/messages/${t.channelMessageId}`, {
-      method: "PATCH", body: JSON.stringify({ embeds: [channelEmbed(t)], components: channelComponents(t) }),
+      method: "PATCH",
+      body: JSON.stringify({ embeds: [channelEmbed(t)], components: channelComponents(t) }),
     });
     return r.ok;
   } catch { return false; }
 }
 
-// A plain follow-up line in the channel (e.g. a user's relayed reply).
 export async function postChannelNote(t, line) {
   if (!process.env.DISCORD_BOT_TOKEN) return false;
   try {
     const r = await discordBotFetch(`/channels/${t.channelId || SUPPORT_CHANNEL_ID}/messages`, {
-      method: "POST", body: JSON.stringify({ embeds: [{ color: t.escalated ? BRAND.yellow : BRAND.color, description: `### Ticket \`${t.id}\`\n${line}`, footer: { text: "Gatherly Support" }, timestamp: new Date().toISOString() }] }),
+      method: "POST",
+      body: JSON.stringify({
+        embeds: [{
+          color: t.escalated ? BRAND.yellow : BRAND.color,
+          description: `### Ticket \`${t.id}\`\n${line}`,
+          footer: { text: "Gatherly Support" },
+          timestamp: new Date().toISOString(),
+        }],
+      }),
     });
     return r.ok;
   } catch { return false; }
 }
 
-export async function dmOpened(t) { return t.discordId ? dmUserEmbed(t.discordId, dmOpenedEmbed(t), dmComponents(t)) : { ok: false }; }
-export async function dmStaffReply(t, text) { return t.discordId ? dmUserEmbed(t.discordId, dmStaffReplyEmbed(text), dmComponents(t)) : { ok: false }; }
-export async function dmResolved(t) { return t.discordId ? dmUserEmbed(t.discordId, dmResolvedEmbed(), null) : { ok: false }; }
+// Send opening DM with v2 payload.
+export async function dmOpened(t) {
+  if (!t.discordId || !process.env.DISCORD_BOT_TOKEN) return { ok: false };
+  try {
+    const ch = await discordBotFetch("/users/@me/channels", {
+      method: "POST", body: JSON.stringify({ recipient_id: t.discordId }),
+    });
+    if (!ch.ok) return { ok: false };
+    const { id: channelId } = await ch.json();
+    const r = await discordBotFetch(`/channels/${channelId}/messages`, {
+      method: "POST", body: JSON.stringify(dmOpenedPayload(t)),
+    });
+    return { ok: r.ok, channelId };
+  } catch { return { ok: false }; }
+}
+
+export async function dmStaffReply(t, text) {
+  if (!t.discordId || !process.env.DISCORD_BOT_TOKEN) return { ok: false };
+  try {
+    const ch = await discordBotFetch("/users/@me/channels", {
+      method: "POST", body: JSON.stringify({ recipient_id: t.discordId }),
+    });
+    if (!ch.ok) return { ok: false };
+    const { id: channelId } = await ch.json();
+    // Update custom_id with real ticket id.
+    const payload = dmStaffReplyPayload(text);
+    if (payload.components?.[0]?.components?.[0]) {
+      payload.components[0].components[0].custom_id = `tkt:reply:${t.id}`;
+    }
+    const r = await discordBotFetch(`/channels/${channelId}/messages`, {
+      method: "POST", body: JSON.stringify(payload),
+    });
+    return { ok: r.ok, channelId };
+  } catch { return { ok: false }; }
+}
+
+export async function dmResolved(t) {
+  if (!t.discordId || !process.env.DISCORD_BOT_TOKEN) return { ok: false };
+  try {
+    const ch = await discordBotFetch("/users/@me/channels", {
+      method: "POST", body: JSON.stringify({ recipient_id: t.discordId }),
+    });
+    if (!ch.ok) return { ok: false };
+    const { id: channelId } = await ch.json();
+    const r = await discordBotFetch(`/channels/${channelId}/messages`, {
+      method: "POST", body: JSON.stringify(dmResolvedPayload()),
+    });
+    return { ok: r.ok, channelId };
+  } catch { return { ok: false }; }
+}
 
 /* --------------------------- staff resolution --------------------------- */
 export async function discordUserIsStaff(discordId) {
