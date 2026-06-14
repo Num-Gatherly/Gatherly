@@ -28,7 +28,7 @@ function card(e) {
         <span><b>${e.durationMin}m</b></span>
         ${live ? `<span>Ends in <b class="countdown" data-countdown="${esc(e.endsAt)}"></b></span>` : `<span>Starts in <b class="countdown" data-countdown="${esc(e.startsAt)}"></b></span>`}
       </div>
-      ${live && e.playerCount != null ? `<div class="live-count"><span class="ldot"></span>${e.playerCount} in-game right now</div>` : ""}
+      ${e.playerCount != null ? `<div class="live-count"><span class="ldot"></span>${e.playerCount}/${e.maxPlayers||40} ${live ? "in-game right now" : "in server now"}</div>` : ""}
       <button class="btn ${live ? "btn-primary" : "btn-ghost"} btn-sm" data-join="${esc(e.id)}" style="margin-top:auto;align-self:flex-start">${live ? "Get join code" : "Join code at start"}</button>
       <div class="alert alert-ok" hidden data-code="${esc(e.id)}"></div>
     </div>
