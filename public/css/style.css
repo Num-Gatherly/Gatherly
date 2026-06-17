@@ -396,3 +396,175 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
 
 .back-home { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .88rem; font-weight: 500; margin-bottom: 14px; }
 .back-home:hover { color: var(--text); text-decoration: none; }
+
+/* ============================================================
+   REPORT V4 — sectioned analytics, heatmap, gating, upsell
+   ============================================================ */
+.rep-section-head { margin: 34px 0 18px; }
+.rep-section-title {
+  font-size: 1.05rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;
+  color: var(--signal); display: flex; align-items: center; gap: 12px;
+}
+.rep-section-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(127,168,255,0.35), transparent); }
+.rep-section-sub { font-size: .85rem; margin-top: 6px; }
+.rep-grid { align-items: start; }
+.rep-box .rep-kick { font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.rep-box h3 { margin-bottom: 10px; }
+
+/* best-time-to-host heatmap */
+.heatmap-7 { display: flex; flex-direction: column; gap: 4px; }
+.heat-row { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px; }
+.heat-day { font-size: .68rem; color: var(--muted); text-align: right; }
+.heat-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
+.heat-cells i { aspect-ratio: 1; border-radius: 2px; }
+.heat-axis .heat-cells { position: relative; height: 14px; }
+.heat-axis .heat-cells span { font-size: .58rem; color: var(--faint); grid-row: 1; }
+
+/* delivery rows */
+.delivery-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.delivery-row:last-child { border-bottom: 0; }
+.del-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); flex-shrink: 0; }
+.del-dot.on { background: var(--good); box-shadow: 0 0 8px var(--good); }
+
+/* retention / win-back band */
+.rep-upsell {
+  display: flex; align-items: center; justify-content: space-between; gap: 22px; flex-wrap: wrap;
+  border: 1px solid rgba(127,168,255,0.32);
+  background: linear-gradient(120deg, rgba(127,168,255,0.10), rgba(62,108,224,0.05));
+}
+.rep-upsell .rep-kick { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--signal); }
+
+/* gated boxes need to fill the grid row cleanly */
+.rep-box.locked { min-height: 220px; }
+
+/* ============================================================
+   CONTROL ROOM + ANNOUNCEMENT REFINEMENTS (Update 5)
+   ============================================================ */
+/* Calmer announcement marker — keep the glass + blue tint, drop the pulsing "AI orb". */
+.announce-dot {
+  width: 7px; height: 7px; border-radius: 2px; transform: rotate(45deg);
+  background: linear-gradient(135deg, #9cbcff, var(--signal));
+  box-shadow: 0 0 0 3px rgba(127,168,255,0.12);
+  animation: none !important;
+}
+/* Editable glass "clickbox" CTA button at the end of the announcement. */
+.announce-cta {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: 10px;
+  padding: 4px 12px; border-radius: 8px; font-size: .8rem; font-weight: 600;
+  color: #eaf1ff !important; text-decoration: none !important;
+  background: rgba(127,168,255,0.14);
+  border: 1px solid rgba(127,168,255,0.38);
+  backdrop-filter: blur(8px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.announce-cta::after { content: "\2192"; opacity: .8; }
+.announce-cta:hover { background: rgba(127,168,255,0.24); border-color: rgba(127,168,255,0.6); transform: translateY(-1px); }
+
+/* Red notification circle over the Control room nav link. */
+.nav-controlroom { position: relative; }
+.nav-cr-badge {
+  position: absolute; top: -7px; right: -12px; min-width: 16px; height: 16px;
+  padding: 0 4px; border-radius: 999px; background: #ff5c5c; color: #fff;
+  font-size: .64rem; font-weight: 700; line-height: 16px; text-align: center;
+  box-shadow: 0 0 0 2px rgba(9,13,19,0.9); }
+
+/* Notification toast image. */
+.g-toast-img { width: 100%; max-height: 150px; object-fit: cover; border-radius: 10px; margin-bottom: 10px; }
+
+/* ============================================================
+   COMMUNITY REVIEW RAIL — tilted "glass laptop" screens (Update 3/12)
+   ============================================================ */
+.laptop-rail-wrap {
+  margin-top: 40px; padding: 30px 0 10px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+.laptop-rail { display: flex; gap: 46px; width: max-content; animation: laptop-scroll 72s linear infinite; will-change: transform; padding: 10px 24px; }
+.laptop-rail-wrap:hover .laptop-rail { animation-play-state: paused; }
+@keyframes laptop-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+.laptop-card { width: 380px; flex-shrink: 0; }
+.laptop { perspective: 1500px; }
+.laptop-screen {
+  position: relative; aspect-ratio: 16 / 10; border-radius: 14px 14px 4px 4px; overflow: hidden;
+  transform: rotateY(-22deg) rotateX(6deg); transform-origin: left center;
+  border: 1px solid rgba(148,170,205,0.22);
+  background: #05080d;
+  box-shadow: 28px 30px 70px -28px rgba(0,0,0,0.8), inset 0 0 0 2px rgba(255,255,255,0.04);
+  transition: transform .5s cubic-bezier(.22,1,.36,1);
+}
+.laptop-card:hover .laptop-screen { transform: rotateY(-10deg) rotateX(3deg); }
+.laptop-screen img { width: 100%; height: 100%; object-fit: cover; }
+.laptop-glare {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(120deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 22%, transparent 42%);
+  mix-blend-mode: screen;
+}
+.laptop-base {
+  height: 12px; margin: 0 6%; border-radius: 0 0 12px 12px;
+  transform: rotateY(-22deg) rotateX(6deg); transform-origin: left center;
+  background: linear-gradient(180deg, rgba(148,170,205,0.3), rgba(148,170,205,0.06));
+  box-shadow: 18px 16px 30px -16px rgba(0,0,0,0.7);
+}
+.laptop-card figcaption { margin-top: 26px; max-width: 330px; }
+.laptop-quote { color: var(--text); font-size: .92rem; line-height: 1.5; }
+.laptop-server { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: .82rem; font-weight: 600; color: var(--signal); }
+.laptop-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px var(--good); }
+@media (max-width: 600px) { .laptop-card { width: 300px; } }
+@media (prefers-reduced-motion: reduce) { .laptop-rail { animation: none; } }
+
+.live-event-card { display: block; }
+.live-event-card:hover { text-decoration: none; }
+
+/* ============================================================
+   ADVERTISING SLOTS + ADVERTISERS PAGE (Update 9)
+   ============================================================ */
+.ad-slot { margin: 26px 0; min-height: 0; }
+.ad-slot:empty { display: none; }
+.ad-banner {
+  display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-radius: 14px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+  text-decoration: none !important; color: var(--text); transition: border-color .2s, transform .2s, background .2s;
+  position: relative; overflow: hidden;
+}
+.ad-banner:hover { border-color: rgba(127,168,255,0.45); transform: translateY(-2px); background: rgba(127,168,255,0.05); }
+.ad-banner img { width: 96px; height: 60px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+.ad-banner .ad-title { font-weight: 600; font-size: .98rem; }
+.ad-banner .ad-cta { margin-left: auto; font-size: .82rem; font-weight: 600; color: var(--signal); white-space: nowrap; }
+.ad-banner .ad-flag { position: absolute; top: 6px; right: 8px; font-size: .58rem; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.ad-house { border-style: dashed; }
+
+.adv-price-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin: 18px 0; }
+.adv-price { border: 1px solid var(--line); border-radius: 14px; padding: 18px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; }
+.adv-price:hover, .adv-price.active { border-color: var(--signal); background: var(--signal-soft); }
+.adv-price b { display: block; font-family: var(--font-display); font-size: 1.8rem; }
+.adv-stat { display: flex; gap: 18px; flex-wrap: wrap; }
+@media (max-width: 700px) { .adv-price-grid { grid-template-columns: 1fr; } }
+
+/* ============================================================
+   NEWS / BLOG (Update 8)
+   ============================================================ */
+.news-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; margin-top: 34px; }
+@media (max-width: 900px) { .news-grid { grid-template-columns: 1fr; } }
+.news-card {
+  display: flex; flex-direction: column; overflow: hidden; padding: 0; cursor: pointer;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--ink-2) 100%);
+  border: 1px solid var(--line); border-radius: var(--radius); transition: transform .25s, border-color .25s, box-shadow .25s;
+}
+.news-card:hover { transform: translateY(-4px); border-color: rgba(127,168,255,0.4); box-shadow: 0 22px 50px -22px rgba(62,108,224,0.3); }
+.news-banner { aspect-ratio: 16/9; background: linear-gradient(120deg, var(--panel-2), var(--ink-2)); overflow: hidden; }
+.news-banner img { width: 100%; height: 100%; object-fit: cover; }
+.news-body { padding: 18px 20px 22px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.news-author { display: flex; align-items: center; gap: 9px; font-size: .82rem; color: var(--muted); }
+.news-author img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+.news-author .na-fallback { width: 26px; height: 26px; border-radius: 50%; background: var(--signal-deep); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; font-size: .8rem; }
+.news-card h3 { margin: 0; }
+.news-excerpt { font-size: .88rem; color: var(--muted); }
+.news-date { font-size: .76rem; color: var(--faint); margin-top: auto; }
+
+.article { max-width: 760px; margin: 0 auto; }
+.article-banner { width: 100%; border-radius: var(--radius); margin: 18px 0 24px; }
+.article-block-img { width: 100%; border-radius: var(--radius); margin: 22px 0; }
+.article p { color: var(--text); font-size: 1.02rem; line-height: 1.75; margin: 16px 0; }
+.article h3 { margin: 30px 0 8px; }
