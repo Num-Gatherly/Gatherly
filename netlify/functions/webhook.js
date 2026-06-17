@@ -1,6 +1,6 @@
 // /api/webhook - Stripe webhook. THE security-critical endpoint.
 //
-// Verifies every event with the `stripe-signature` header over the RAW body
+// Verifies every event with the stripe-signature header over the RAW body
 // using STRIPE_WEBHOOK_SECRET, so nobody can POST a fake "you paid" event.
 //
 // Handles the full lifecycle:
@@ -12,12 +12,11 @@
 // Env vars: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 import {
   json, usersStore, miscStore, audit, verifyStripeSignature,
-  normalizePlan, PLAN_INFO, monthKey,
+  normalizePlan, PLAN_INFO, monthKey, adsStore, postStaffEvent, brandEmbed,
 } from "../lib/util.js";
 
 async function fetchT(url, opts = {}, ms = 10000) { return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) }); }
 
-// Fetch a Stripe object so we can read accurate period dates.
 async function stripeGet(path) {
   const sk = process.env.STRIPE_SECRET_KEY;
   if (!sk) return null;
@@ -31,7 +30,6 @@ async function stripeGet(path) {
 const uStore = () => usersStore();
 const mStore = () => miscStore();
 
-// customerId -> our userId mapping (so renewals/cancellations find the account)
 const custKey = (cid) => `scust_${cid}`;
 async function linkCustomer(customerId, userId) { if (customerId && userId) await mStore().setJSON(custKey(customerId), { userId }); }
 async function userIdFromCustomer(customerId) {
@@ -93,6 +91,24 @@ async function route(event) {
     const customerId = obj.customer || null;
     if (customerId) await linkCustomer(customerId, userId);
 
+    // (a0) Advertising placement purchase -> mark paid, leave PENDING for staff approval.
+    if (meta.kind === "ad") {
+      const ad = await adsStore().get(meta.adId, { type: "json" });
+      if (ad) {
+        ad.paid = true; ad.paidAt = new Date().toISOString();
+        await adsStore().setJSON(ad.id, ad);
+        await audit({ id: userId, username: user.username }, "billing.ad-paid", { adId: ad.id });
+        await postStaffEvent(brandEmbed({
+          title: "New advertisement awaiting approval",
+          description: `**${ad.title}**\nBy ${ad.username} · ${ad.days}-day placement · paid.`,
+          color: ad.scan?.flagged ? 0xffcf5c : 0x7fa8ff,
+          fields: ad.scan?.flagged ? [{ name: "Watchdog flags", value: ad.scan.reasons.join("\n").slice(0, 1000) }] : [],
+          thumbnail: ad.image || undefined,
+        }));
+      }
+      return;
+    }
+
     // (a) Credit pack purchase ("Gatherly Custom")
     if (meta.kind === "credits") {
       const add = Math.max(0, parseInt(meta.credits, 10) || 0);
@@ -117,7 +133,6 @@ async function route(event) {
     if (cycle === "lifetime") {
       await uStore().setJSON(userId, { ...base, lifetime: true, planExpiresAt: null });
     } else {
-      // Pull accurate period end from the subscription if we can.
       let expiresAt = null;
       if (obj.subscription) { const sub = await stripeGet(`subscriptions/${obj.subscription}`); expiresAt = expiryFromUnix(sub?.current_period_end); }
       await uStore().setJSON(userId, { ...base, lifetime: false, planExpiresAt: expiresAt || expiryFromCycle(cycle) });
@@ -151,8 +166,6 @@ async function route(event) {
     const active = obj.status === "active" || obj.status === "trialing";
     await uStore().setJSON(userId, {
       ...user, subStatus: obj.status,
-      // Active (incl. "cancel at period end"): keep access until current_period_end.
-      // Otherwise cut access now. Credits and reports are left untouched.
       planExpiresAt: active ? expiryFromUnix(obj.current_period_end) : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
