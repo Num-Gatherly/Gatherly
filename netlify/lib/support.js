@@ -1,11 +1,11 @@
 // Shared support helpers used by /api/tickets and /api/interactions.
-// Embeds v2 throughout. Report DM includes a link button to the website report.
 import {
   ticketsStore, usersStore, BRAND, discordBotFetch, dmUserEmbed,
   isStaff, effectivePlan, planName,
 } from "./util.js";
 
 export const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID || "1515235842292187246";
+export const SUPPORT_PING_ROLE_ID = process.env.SUPPORT_PING_ROLE_ID || "1514879974643990698";
 const SITE_URL = process.env.SITE_URL || "https://gatherly-erlc.xyz";
 const PLAN_RANK = { ultra: 2, pro: 1, free: 0 };
 
@@ -43,43 +43,7 @@ export function appendMessage(t, from, text) {
   return t;
 }
 
-/* ------------------------------- embeds v2 ------------------------------ */
-// Helper: build an embeds v2 message body with optional link button.
-function v2Message(components, linkButton = null) {
-  const rows = [...components];
-  if (linkButton) {
-    rows.push({
-      type: 1,
-      components: [linkButton],
-    });
-  }
-  return { components: rows, flags: 32768 }; // 32768 = IS_COMPONENTS_V2
-}
-
-// Container component (type 17) - the glass card wrapper for embeds v2.
-function container(color, children) {
-  return { type: 17, accent_color: color, components: children };
-}
-
-// Section with text (type 9).
-function section(text) {
-  return { type: 9, components: [{ type: 10, content: text }] };
-}
-
-// Text display (type 10).
-function textBlock(content) {
-  return { type: 10, content };
-}
-
-// Separator (type 14).
-const sep = () => ({ type: 14, divider: true, spacing: 1 });
-
-// Big blue link button.
-function reportButton(label, url) {
-  return { type: 2, style: 5, label, url };
-}
-
-/* -------------------- staff channel card (embeds v2) -------------------- */
+/* ------------------------------- embeds --------------------------------- */
 export function channelEmbed(t) {
   const color = t.status === "closed" ? 0x9aa4b2 : t.escalated ? BRAND.yellow : t.assignedTo ? BRAND.green : BRAND.red;
   const statusText = t.status === "closed" ? "Closed" : t.escalated ? "Escalated - high urgency" : t.assignedTo ? `Claimed by ${t.assignedToName}` : "Open, unclaimed";
@@ -124,7 +88,7 @@ export function dmComponents(t) {
   }];
 }
 
-/* -------------------- user-facing DM embeds (v2) ------------------------ */
+/* -------------------- user-facing DM embeds -------------------- */
 export function dmOpenedPayload(t) {
   return {
     embeds: [{
@@ -189,7 +153,7 @@ export function dmResolvedPayload() {
   };
 }
 
-/* -------------------- report DM (embeds v2 with button) ---------------- */
+/* -------------------- report DM (with button) -------------------- */
 export function reportDmPayload(ev, report, eventId) {
   const scoreColor = report.score >= 70 ? BRAND.green : report.score >= 45 ? BRAND.color : BRAND.red;
   const scoreEmoji = report.score >= 70 ? "🟢" : report.score >= 45 ? "🟡" : "🔴";
@@ -238,7 +202,12 @@ export async function sendChannelCard(t) {
   try {
     const r = await discordBotFetch(`/channels/${SUPPORT_CHANNEL_ID}/messages`, {
       method: "POST",
-      body: JSON.stringify({ embeds: [channelEmbed(t)], components: channelComponents(t) }),
+      body: JSON.stringify({
+        content: SUPPORT_PING_ROLE_ID ? `<@&${SUPPORT_PING_ROLE_ID}> — a new support ticket needs attention.` : undefined,
+        allowed_mentions: { roles: SUPPORT_PING_ROLE_ID ? [SUPPORT_PING_ROLE_ID] : [] },
+        embeds: [channelEmbed(t)],
+        components: channelComponents(t),
+      }),
     });
     if (!r.ok) return { ok: false };
     const m = await r.json();
@@ -275,7 +244,6 @@ export async function postChannelNote(t, line) {
   } catch { return false; }
 }
 
-// Send opening DM with v2 payload.
 export async function dmOpened(t) {
   if (!t.discordId || !process.env.DISCORD_BOT_TOKEN) return { ok: false };
   try {
@@ -299,7 +267,6 @@ export async function dmStaffReply(t, text) {
     });
     if (!ch.ok) return { ok: false };
     const { id: channelId } = await ch.json();
-    // Update custom_id with real ticket id.
     const payload = dmStaffReplyPayload(text);
     if (payload.components?.[0]?.components?.[0]) {
       payload.components[0].components[0].custom_id = `tkt:reply:${t.id}`;
