@@ -22,8 +22,8 @@ export function renderNav(active = "") {
   const el = document.getElementById("nav");
   if (!el) return;
   const links = [
-    ["Discover", "/events"], ["Advertise", "/advertise"], ["Dashboard", "/dashboard"],
-    ["Reports", "/reports"], ["Pricing", "/pricing"], ["Support", "/contact"],
+    ["Discover", "/events"], ["List event", "/advertise"], ["Reports", "/reports"],
+    ["News", "/news"], ["Pricing", "/pricing"], ["Advertise", "/advertisers"], ["Support", "/contact"],
   ];
   el.className = "nav";
   el.innerHTML = `
@@ -55,6 +55,14 @@ export function renderNav(active = "") {
   }).catch(() => {});
 }
 
+// Discord's CDN only serves power-of-two image sizes (16..4096). Requesting a
+// non-power-of-two size (e.g. 56 or 72) makes the CDN reject the request, which
+// is why the dropdown avatar was rendering blank. Snap to the nearest valid size.
+function discordImgSize(px) {
+  const allowed = [16, 32, 64, 128, 256, 512, 1024];
+  return allowed.reduce((best, v) => (Math.abs(v - px) < Math.abs(best - px) ? v : best), 64);
+}
+
 // Build full Discord avatar URL from stored hash + discordId.
 // auth.js stores just the hash; this reconstructs the CDN URL.
 function avatarUrl(user, size = 64) {
@@ -63,7 +71,7 @@ function avatarUrl(user, size = 64) {
   if (user.avatar && user.avatar.startsWith("http")) return user.avatar;
   // If avatar is a hash and we have discordId, build the CDN URL.
   if (user.avatar && user.discordId) {
-    return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png?size=${size}`;
+    return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png?size=${discordImgSize(size)}`;
   }
   return null;
 }
@@ -78,12 +86,24 @@ function avatarMarkup(user, size = 28) {
 function buildUserButton(el, user) {
   const wrap = el.querySelector("#navUserWrap");
   wrap.innerHTML = `
-    ${user.role ? `<a href="/admin" class="nav-controlroom">Control room</a>` : ""}
+    ${user.role ? `<a href="/admin" class="nav-controlroom">Control room<span class="nav-cr-badge" id="navCrBadge" hidden></span></a>` : ""}
     <button class="nav-user-btn" id="navAuth" type="button">
       ${avatarMarkup(user, 28)}
       <span class="nav-user-name">${esc(user.username)}</span>
       <span class="nav-user-caret">&#9662;</span>
     </button>`;
+
+  // Live red notification count over Control room so staff stay on top of work.
+  if (user.role) {
+    const refreshBadge = () => api("/api/admin?action=pending-count").then((d) => {
+      const b = document.getElementById("navCrBadge");
+      if (!b) return;
+      if (d.pending > 0) { b.textContent = d.pending > 99 ? "99+" : d.pending; b.hidden = false; }
+      else b.hidden = true;
+    }).catch(() => {});
+    refreshBadge();
+    setInterval(refreshBadge, 30000);
+  }
 
   el.querySelector("#navAuth").addEventListener("click", (e) => {
     e.stopPropagation();
@@ -140,7 +160,11 @@ export function renderAnnouncements() {
       const a = list[i % list.length];
       textEl.classList.remove("in");
       void textEl.offsetWidth;
-      textEl.innerHTML = a.link ? `<a href="${esc(a.link)}">${esc(a.text)}</a>` : esc(a.text);
+      const body = a.link ? `<a href="${esc(a.link)}">${esc(a.text)}</a>` : esc(a.text);
+      // Optional editable "clickbox" CTA — a glass button at the end of the message.
+      const cta = a.cta && a.cta.text && a.cta.link
+        ? `<a class="announce-cta" href="${esc(a.cta.link)}">${esc(a.cta.text)}</a>` : "";
+      textEl.innerHTML = body + cta;
       textEl.classList.add("in");
       i++;
     };
@@ -158,8 +182,10 @@ export function renderNotifications() {
     const n = list[0];
     const toast = document.createElement("div");
     toast.className = "g-toast";
+    const safeImg = n.image && /^https?:\/\//i.test(n.image) ? n.image : null;
     toast.innerHTML = `
       <button class="g-toast-x" aria-label="Dismiss" type="button">&times;</button>
+      ${safeImg ? `<img class="g-toast-img" src="${esc(safeImg)}" alt="" onerror="this.style.display='none'">` : ""}
       <div class="g-toast-title">${esc(n.title)}</div>
       ${n.body ? `<div class="g-toast-body">${esc(n.body)}</div>` : ""}
       ${n.link ? `<a class="g-toast-link" href="${esc(n.link)}">Open &rarr;</a>` : ""}`;
@@ -237,8 +263,8 @@ export function renderFooter() {
           <a class="brand" href="/" style="margin-bottom:12px"><img src="/assets/logo-white.webp" alt="" width="24" height="28">Gatherly</a>
           <p style="font-size:.88rem;max-width:300px">The event layer for ER:LC roleplay. Advertise sessions, fill your server, and measure what happened with verified API data.</p>
         </div>
-        <div><h4>Platform</h4><a href="/events">Discover events</a><a href="/advertise">Advertise an event</a><a href="/reports">Engagement reports</a><a href="/pricing">Pricing</a></div>
-        <div><h4>Account</h4><a href="/dashboard">Dashboard</a><a href="/settings">Settings</a><a href="/login">Log in</a></div>
+        <div><h4>Platform</h4><a href="/events">Discover events</a><a href="/advertise">List an event</a><a href="/reports">Engagement reports</a><a href="/pricing">Pricing</a></div>
+        <div><h4>Community</h4><a href="/news">News</a><a href="/advertisers">Advertise on Gatherly</a><a href="/dashboard">Dashboard</a><a href="/settings">Settings</a></div>
         <div><h4>Company</h4><a href="/contact">Support</a><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a></div>
       </div>
       <div class="foot-base">
@@ -249,6 +275,54 @@ export function renderFooter() {
   initStatusDot();
 }
 
+/* =========================================================================
+   ADVERTISING SLOTS — rotate staff-approved + house ads in any .ad-slot
+   element on the page. House ads are weighted to show the majority of the
+   time, and the ratio/seconds are configurable from Control Room -> Ads.
+   ========================================================================= */
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function adBanner(a) {
+  const href = a.tracked ? `/api/ads?action=click&id=${encodeURIComponent(a.id)}` : esc(a.link || "#");
+  const img = a.image ? `<img src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : "";
+  return `<a class="ad-banner ${a.tracked ? "" : "ad-house"}" href="${href}"${a.tracked ? ` rel="sponsored nofollow" target="_blank"` : ""}>
+    ${img}<span class="ad-title">${esc(a.title || "")}</span>
+    <span class="ad-cta">${a.tracked ? "Visit &rarr;" : "Learn more &rarr;"}</span>
+    <span class="ad-flag">${a.tracked ? "Sponsored" : "Gatherly"}</span>
+  </a>`;
+}
+
+function trackImpression(id) {
+  try {
+    const body = JSON.stringify({ id });
+    if (navigator.sendBeacon) navigator.sendBeacon("/api/ads?action=impression", new Blob([body], { type: "application/json" }));
+    else fetch("/api/ads?action=impression", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true });
+  } catch {}
+}
+
+export function renderAdSlots() {
+  const slots = [...document.querySelectorAll(".ad-slot[data-ad-slot]")];
+  if (!slots.length) return;
+  api("/api/ads?action=active").then(({ config, ads, house }) => {
+    const pool = [];
+    (ads || []).forEach((a) => { for (let i = 0; i < (config.advertiserWeight || 1); i++) pool.push({ ...a, tracked: true }); });
+    (house || []).forEach((a) => { for (let i = 0; i < (config.houseWeight || 4); i++) pool.push({ ...a, tracked: false }); });
+    if (!pool.length) return;            // empty .ad-slot is hidden via CSS
+    shuffle(pool);
+    const rot = Math.max(3, config.rotateSec || 8) * 1000;
+    slots.forEach((slot, si) => {
+      let idx = si % pool.length;
+      const show = () => {
+        const a = pool[idx % pool.length]; idx++;
+        slot.innerHTML = adBanner(a);
+        if (a.tracked) trackImpression(a.id);
+      };
+      show();
+      setInterval(show, rot + si * 500);
+    });
+  }).catch(() => {});
+}
+
 export function boot(active) {
   renderNav(active);
   renderAnnouncements();
@@ -256,4 +330,5 @@ export function boot(active) {
   renderFooter();
   initReveal();
   tickCountdowns();
+  renderAdSlots();
 }
