@@ -145,6 +145,20 @@
     footer { background: rgba(9,13,19,0.5); backdrop-filter: blur(12px); border-top: 1px solid rgba(148,170,205,0.10) !important; }
 
     @media (max-width: 900px) { .hero-float-badge { display: none; } }
+
+    /* Hero rotating verb: strike-through, then swap to the next word */
+    .word-rotate { position: relative; display: inline-block; color: var(--signal); font-weight: 600; }
+    .word-rotate .wr-word { display: inline-block; transition: opacity .3s ease, transform .3s ease; }
+    .word-rotate .wr-strike {
+      position: absolute; left: -2px; right: -2px; top: 56%; height: 2px; width: 0;
+      background: currentColor; border-radius: 2px;
+    }
+    .word-rotate.striking .wr-strike { width: calc(100% + 4px); transition: width .36s cubic-bezier(.65,0,.35,1); }
+    .word-rotate.swapping .wr-word { opacity: 0; transform: translateY(-7px); }
+    @media (prefers-reduced-motion: reduce) {
+      .word-rotate .wr-strike { display: none; }
+      .word-rotate .wr-word { transition: none; }
+    }
   </style>
 </head>
 <body>
@@ -164,7 +178,7 @@
     <div>
       <span class="hero-pulse"><b id="liveCount">-</b><span id="pulseLabel">events live right now</span></span>
       <h1 id="heroHeadline">Fill every session.<br>Then <span class="accent">prove it worked.</span></h1>
-      <p class="lede" id="heroSub">ER:LC event advertising with post-event analytics.</p>
+      <p class="lede" id="heroSub">The ER:LC event platform built to <span class="word-rotate" id="heroRotate"><span class="wr-word">elevate</span><span class="wr-strike" aria-hidden="true"></span></span> your server.</p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="/advertise">Advertise your event</a>
         <a class="btn btn-ghost" href="/events">Browse live events</a>
@@ -183,13 +197,15 @@
 
 <section class="section">
   <div class="wrap">
-    <div class="reveal"><span class="kicker">Reach</span>
-      <h2>Built where ER:LC players already are</h2></div>
+    <div class="reveal"><span class="kicker">Projected reach</span>
+      <h2>Built where ER:LC players already are</h2>
+      <p style="margin-top:10px;max-width:560px">Gatherly hasn't launched publicly yet, so these are <b>projected forecasts</b> modelled on the ER:LC roleplay community &mdash; not live results. We'll swap them for verified numbers the moment we're live.</p></div>
     <div class="grid grid-3" style="margin-top:34px">
-      <div class="stat reveal reveal-d1"><b>38k+</b><span>Players browsing Gatherly listings each week</span></div>
-      <div class="stat reveal reveal-d2"><b>1,200+</b><span>Roleplay events advertised every month</span></div>
-      <div class="stat reveal reveal-d3"><b>3.1%</b><span>Listing views converting to in-server joins</span></div>
+      <div class="stat reveal reveal-d1"><b>38k+</b><span>Projected players browsing Gatherly listings each week</span></div>
+      <div class="stat reveal reveal-d2"><b>1,200+</b><span>Projected roleplay events advertised every month</span></div>
+      <div class="stat reveal reveal-d3"><b>3.1%</b><span>Forecast listing-view to in-server join conversion</span></div>
     </div>
+    <p class="note reveal" style="margin-top:18px">Figures are projected forecasting for pre-launch planning only.</p>
   </div>
 </section>
 
@@ -240,6 +256,33 @@
     </div>
   </div>
 </section>
+
+<section class="section" style="overflow:hidden">
+  <div class="wrap">
+    <div class="reveal"><span class="kicker">From the community</span>
+      <h2>Real servers. Real sessions.</h2>
+      <p style="margin-top:10px;max-width:560px">Hosts across the Australian ER:LC scene use Gatherly to fill events and prove what worked. Here's a look inside their servers.</p>
+    </div>
+  </div>
+  <div class="laptop-rail-wrap reveal" id="reviewRail" aria-label="Community screenshots and reviews">
+    <div class="laptop-rail" id="reviewTrack"></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="reveal" style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap">
+      <div><span class="kicker">Live right now</span><h2>Events filling up as we speak</h2></div>
+      <a class="btn btn-ghost btn-sm" href="/events">Browse all events</a>
+    </div>
+    <div class="grid grid-3 reveal" id="liveEventsGrid" style="margin-top:30px">
+      <p class="note" style="grid-column:1/-1">Loading live events&hellip;</p>
+    </div>
+  </div>
+</section>
+
+<!-- Advertising slot (rotated, staff-approved) -->
+<div class="wrap"><div class="ad-slot" data-ad-slot="home-mid"></div></div>
 
 <section class="section">
   <div class="wrap">
@@ -326,6 +369,36 @@
       canvas.style.display = "none";
       document.querySelectorAll(".orb").forEach((o) => o.style.animation = "none");
     }
+
+    // Hero rotating verb: strike the current word, swap it, fade the next one in.
+    (function () {
+      const el = document.getElementById("heroRotate");
+      if (!el) return;
+      const wordEl = el.querySelector(".wr-word");
+      const strike = el.querySelector(".wr-strike");
+      if (!wordEl || !strike) return;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const words = ["elevate", "grow", "improve", "scale", "fill", "level up", "retain"];
+      let i = 0;
+      const cycle = () => {
+        if (reduce) { i = (i + 1) % words.length; wordEl.textContent = words[i]; return; }
+        el.classList.add("striking");
+        setTimeout(() => {
+          el.classList.add("swapping");
+          setTimeout(() => {
+            i = (i + 1) % words.length;
+            wordEl.textContent = words[i];
+            strike.style.transition = "none";
+            el.classList.remove("striking");
+            requestAnimationFrame(() => {
+              strike.style.transition = "";
+              el.classList.remove("swapping");
+            });
+          }, 320);
+        }, 440);
+      };
+      setInterval(cycle, 2600);
+    })();
   })();
 </script>
 </body>
