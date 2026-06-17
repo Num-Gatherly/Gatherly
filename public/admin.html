@@ -38,14 +38,31 @@
 <section class="wrap" style="padding-bottom:80px">
 
   <nav class="cr-tabs">
+    <button class="cr-tab" data-tab="checklist">Checklist <span class="cr-badge" id="checklistBadge" style="display:none"></span></button>
     <button class="cr-tab" data-tab="support">Support <span class="cr-badge" id="supportBadge" style="display:none"></span></button>
-    <button class="cr-tab" data-tab="users">Users</button>
-    <button class="cr-tab" data-tab="events">Events</button>
-    <button class="cr-tab" data-tab="announcements">Announcements</button>
-    <button class="cr-tab" data-tab="notifications">Notifications</button>
+    <button class="cr-tab exec-only" data-tab="ads">Ads <span class="cr-badge" id="adsBadge" style="display:none"></span></button>
+    <button class="cr-tab exec-only" data-tab="news">News</button>
+    <button class="cr-tab exec-only" data-tab="users">Users</button>
+    <button class="cr-tab exec-only" data-tab="events">Events</button>
+    <button class="cr-tab exec-only" data-tab="announcements">Announcements</button>
+    <button class="cr-tab exec-only" data-tab="notifications">Notifications</button>
     <button class="cr-tab exec-only" data-tab="executive">Executive</button>
     <button class="cr-tab" data-tab="audit">Audit log</button>
   </nav>
+
+  <!-- CHECKLIST (weekly AI audit) -->
+  <div class="cr-panel" data-panel="checklist">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <h3 style="margin:0">Weekly staff checklist</h3>
+      <span class="note" style="margin:0;border:0" id="checklistTime"></span>
+    </div>
+    <p style="margin-bottom:18px;max-width:640px">An automated sweep of everything that needs a human: unanswered tickets, escalations, and security flags raised by the watchdog. Resolve or escalate each item so nothing slips through.</p>
+    <div id="checklistSummary" class="grid grid-3" style="margin-bottom:22px"></div>
+    <h4 style="margin-bottom:10px">Security flags</h4>
+    <div id="checklistFlags"><p style="color:var(--muted)">Loading&hellip;</p></div>
+    <h4 style="margin:22px 0 10px">Open tickets</h4>
+    <div id="checklistTickets"><p style="color:var(--muted)">Loading&hellip;</p></div>
+  </div>
 
   <!-- SUPPORT -->
   <div class="cr-panel" data-panel="support">
@@ -82,9 +99,17 @@
           <label class="field">Text <small>Shown in the site banner.</small>
             <input id="announceText" class="input" maxlength="240" placeholder="Announcement text&hellip;">
           </label>
-          <label class="field">Link (optional)
+          <label class="field">Link (optional) <small>Makes the whole banner text a link.</small>
             <input id="announceLink" class="input" maxlength="300" placeholder="https://&hellip;">
           </label>
+          <div class="split-panel" style="gap:12px">
+            <label class="field">CTA button text (optional) <small>A glass "clickbox" at the end.</small>
+              <input id="announceCtaText" class="input" maxlength="40" placeholder="Check it out!">
+            </label>
+            <label class="field">CTA button link (optional)
+              <input id="announceCtaLink" class="input" maxlength="300" placeholder="/pricing">
+            </label>
+          </div>
           <label class="field">Duration (minutes, leave blank for permanent)
             <input id="announceDuration" class="input" type="number" min="1" placeholder="e.g. 60">
           </label>
@@ -109,6 +134,9 @@
       <label class="field">Body (optional)
         <input id="notifyBody" class="input" maxlength="300" placeholder="Short description&hellip;">
       </label>
+      <label class="field">Image URL (optional) <small>Shown inside the bottom-left toast.</small>
+        <input id="notifyImage" class="input" maxlength="400" placeholder="https://&hellip;/image.png">
+      </label>
       <label class="field">Link (optional)
         <input id="notifyLink" class="input" maxlength="300" placeholder="https://&hellip;">
       </label>
@@ -120,16 +148,89 @@
     </div>
   </div>
 
+  <!-- ADS (Update 9) -->
+  <div class="cr-panel exec-only" data-panel="ads">
+    <div class="split-panel">
+      <div>
+        <h3 style="margin-bottom:14px">Advertisement queue</h3>
+        <div id="adsList"><p style="color:var(--muted)">Loading&hellip;</p></div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:14px">Rotation config</h3>
+        <div class="card">
+          <label class="field">Seconds per advertisement
+            <input id="adRotateSec" class="input" type="number" min="3" max="60" placeholder="8">
+          </label>
+          <label class="field">House (Gatherly) weight <small>How often house ads appear in the rotation.</small>
+            <input id="adHouseWeight" class="input" type="number" min="0" max="20" placeholder="4">
+          </label>
+          <label class="field">Advertiser weight <small>How often each paid ad appears.</small>
+            <input id="adAdvWeight" class="input" type="number" min="1" max="20" placeholder="1">
+          </label>
+          <button class="btn btn-primary btn-sm" onclick="saveAdConfig()">Save rotation</button>
+          <p class="note" style="margin-top:10px">Default 4:1 means Gatherly's own messages get ~80% of impressions while paid ads fill the rest. Adjust freely.</p>
+          <div id="adCfgMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEWS (Update 8) -->
+  <div class="cr-panel exec-only" data-panel="news">
+    <div class="split-panel">
+      <div>
+        <h3 style="margin-bottom:14px">All articles</h3>
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="newArticle()">New article</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadNews()">Refresh</button>
+        </div>
+        <div id="newsList"><p style="color:var(--muted)">Loading&hellip;</p></div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:14px">Editor</h3>
+        <div class="card">
+          <input type="hidden" id="newsId">
+          <label class="field">Title
+            <input id="newsTitleInput" class="input" maxlength="160" placeholder="Update title">
+          </label>
+          <label class="field">Author display name
+            <input id="newsAuthor" class="input" maxlength="60" placeholder="Gatherly Team">
+          </label>
+          <label class="field">Author avatar URL (optional)
+            <input id="newsAvatar" class="input" maxlength="500" placeholder="https://&hellip;">
+          </label>
+          <label class="field">Banner image URL (optional)
+            <input id="newsBanner" class="input" maxlength="500" placeholder="https://&hellip;">
+          </label>
+          <label class="field">Excerpt <small>One-line teaser shown in the article list.</small>
+            <input id="newsExcerpt" class="input" maxlength="200" placeholder="What's new in this update">
+          </label>
+          <label class="field">Blocks <small>One per block. Prefix images with <code>img:</code> and headings with <code>h:</code>. Plain lines are paragraphs.</small>
+            <textarea id="newsBlocks" class="input" rows="10" placeholder="h: Introducing Ultra Intelligence&#10;Gatherly Ultra now ships with 12 deep-signal analytics.&#10;img:https://example.com/screenshot.png&#10;Read on for what each box does."></textarea>
+          </label>
+          <label class="field" style="display:flex;gap:8px;align-items:center">
+            <input id="newsPublished" type="checkbox" style="width:auto;margin:0">
+            <span>Publish (visible on /news)</span>
+          </label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveNews()">Save</button>
+            <button class="btn btn-ghost btn-sm" onclick="newArticle()">Clear / new</button>
+            <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" onclick="deleteNews()">Delete</button>
+          </div>
+          <div id="newsMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- EXECUTIVE -->
   <div class="cr-panel exec-only" data-panel="executive">
     <div class="split-panel">
       <div>
-        <h3 style="margin-bottom:14px">Access codes</h3>
+        <h3 style="margin-bottom:14px">Admin access codes</h3>
         <div class="card" style="margin-bottom:14px">
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="genCode('admin')">Generate admin code</button>
-            <button class="btn btn-ghost btn-sm" onclick="genCode('executive')">Generate executive code</button>
-          </div>
+          <p style="font-size:.85rem;margin-bottom:10px">Generate a single-use <b>admin</b> code. Codes are stored hashed (never in plaintext) and <b>expire 30 minutes</b> after generation. There is no executive code &mdash; executives are assigned directly from the Users tab.</p>
+          <button class="btn btn-ghost btn-sm" onclick="genCode()">Generate admin code</button>
           <div id="execMsg" style="margin-top:10px"></div>
         </div>
         <div id="codeList"></div>
