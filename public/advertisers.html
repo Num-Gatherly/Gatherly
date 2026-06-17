@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Advertise on Gatherly</title>
+  <meta name="description" content="Put your ER:LC server or community in front of thousands of players. Clean banner placements cycled across Gatherly, with full click and impression analytics.">
+  <link rel="icon" href="/assets/favicon.png">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600&f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav id="nav"></nav>
+
+<header class="section" style="padding-bottom:24px">
+  <div class="wrap">
+    <a href="/" class="back-home">&larr; Back to home</a>
+    <span class="kicker">Advertising</span>
+    <h1 style="font-size:clamp(2rem,4vw,3rem)">Reach the ER:LC community</h1>
+    <p style="margin-top:10px;max-width:620px">Clean banner placements cycled across Gatherly &mdash; the discovery feed, reports, and news. Twelve slots, full click and impression analytics, and every ad is human-reviewed before it runs.</p>
+    <div class="adv-stat" style="margin-top:22px">
+      <div class="stat"><b id="statSlots">12</b><span>Placement slots site-wide</span></div>
+      <div class="stat"><b>3&ndash;14d</b><span>Flexible booking lengths</span></div>
+      <div class="stat"><b>Live</b><span>Click &amp; impression tracking</span></div>
+    </div>
+  </div>
+</header>
+
+<section class="wrap" style="padding-bottom:30px">
+  <div class="split">
+    <div class="card">
+      <span class="badge badge-boost" style="margin-bottom:8px">Book a placement</span>
+      <h3>Create your advertisement</h3>
+      <p style="font-size:.88rem;margin:6px 0 14px">Pay securely with Stripe. Your ad enters review and goes live once a staff member approves it.</p>
+      <label class="field">Headline <small>Keep it short and clear.</small>
+        <input id="adTitle" class="input" maxlength="80" placeholder="Join Liberty County's #1 patrol server">
+      </label>
+      <label class="field">Destination link <small>Where clicks go. Scanned by our watchdog.</small>
+        <input id="adLink" class="input" maxlength="300" placeholder="https://discord.gg/yourserver">
+      </label>
+      <label class="field">Banner image URL (optional) <small>Direct https image, ~16:10.</small>
+        <input id="adImage" class="input" maxlength="400" placeholder="https://&hellip;/banner.png">
+      </label>
+      <label class="field" style="margin-bottom:8px">Placement length</label>
+      <div class="adv-price-grid" id="adPacks"></div>
+      <button class="btn btn-primary" id="adBuy" style="width:100%">Continue to secure checkout</button>
+      <p class="note" style="margin-top:12px">By booking you agree to our <a href="/terms#consumer">advertising terms</a>. Payment does not guarantee placement &mdash; ads that breach our standards are denied and the unused portion refunded.</p>
+      <div id="adMsg" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h3>Why Gatherly</h3>
+      <ul class="plan" style="list-style:none;margin-top:10px">
+        <li>Seen by ER:LC hosts and players actively browsing events</li>
+        <li>Rotated cleanly &mdash; never intrusive pop-ups</li>
+        <li>Real analytics: impressions, clicks, unique visitors, CTR</li>
+        <li>Human-reviewed &amp; watchdog-scanned for safety</li>
+        <li>Cancel-and-refund protection under Australian Consumer Law</li>
+      </ul>
+      <div class="ad-slot" data-ad-slot="advertisers-demo" style="margin-top:20px"></div>
+      <p class="note">Live example of a rotating placement.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" style="padding-bottom:80px">
+  <h2 style="font-size:1.5rem;margin-bottom:8px">Your advertisements</h2>
+  <p style="margin-bottom:18px">Track performance for every placement you've booked.</p>
+  <div id="adDashboard"><p class="note">Log in to see your advertisements.</p></div>
+</section>
+
+<footer id="footer"></footer>
+<script type="module" src="/js/pages/advertisers.js"></script>
+</body>
+</html>
