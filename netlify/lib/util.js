@@ -5,12 +5,12 @@ import { getStore } from "@netlify/blobs";
 import crypto from "node:crypto";
 
 /* =========================================================================
-   TUNABLE CONSTANTS  (change these freely, nothing else depends on the value)
+   TUNABLE CONSTANTS
    ========================================================================= */
-export const PLAYER_CAP = 40;                 // ER:LC servers hold max 40 in-server. Queue can exceed this.
+export const PLAYER_CAP = 40;
 export const BLACKLIST_ROLE_ID_DEFAULT = "1515466445084037285";
-const PRO_MONTHLY_CREDITS = 8;                // boost credits granted each month on Pro
-const ULTRA_MONTHLY_CREDITS = 24;             // boost credits granted each month on Ultra
+const PRO_MONTHLY_CREDITS = 6;
+const ULTRA_MONTHLY_CREDITS = 12;
 const EVENT_CAP_FREE = 6;
 const EVENT_CAP_PRO = 14;
 const EVENT_CAP_ULTRA = 21;
@@ -34,6 +34,8 @@ export const imagesStore = () => getStore("images");
 export const ticketsStore = () => getStore("tickets");
 export const auditStore = () => getStore("audit");
 export const codesStore = () => getStore("adminCodes");
+export const adsStore = () => getStore("ads");
+export const newsStore = () => getStore("news");
 
 /* =========================================================================
    SECRETS / SESSION
@@ -102,8 +104,6 @@ export function decrypt(blob) {
 
 /* =========================================================================
    RATE LIMITING + WATCHDOG
-   rateState returns { ok, retryAfter } so callers can show a precise wait.
-   guard() is the one-liner: it rate-limits AND flags the watchdog on a trip.
    ========================================================================= */
 export async function rateState(bucket, limit, windowSec) {
   const store = miscStore();
@@ -121,13 +121,10 @@ export async function rateState(bucket, limit, windowSec) {
   return { ok: true, retryAfter: 0 };
 }
 
-// Backward-compatible boolean form (existing code keeps working).
 export async function rateLimit(bucket, limit, windowSec) {
   return (await rateState(bucket, limit, windowSec)).ok;
 }
 
-// Drop-in protection for any action endpoint.
-// Usage:  const blocked = await guard(req, user, `create:${user.id}`, 5, 60); if (blocked) return blocked;
 export async function guard(req, actor, bucket, limit, windowSec, opts = {}) {
   const st = await rateState(bucket, limit, windowSec);
   if (st.ok) return null;
@@ -139,7 +136,6 @@ export async function guard(req, actor, bucket, limit, windowSec, opts = {}) {
   return json({ error: `You are doing this too fast, please wait ${st.retryAfter}s and try again.`, retryAfter: st.retryAfter }, 429);
 }
 
-// Automated safety flag, modelled on Discord automod: who, what, and the risk.
 export async function flagWatchdog(actor, req, kind, detail = {}) {
   await audit(actor, `watchdog.${kind}`, { ...detail, watchdog: true });
   const url = process.env.WATCHDOG_WEBHOOK_URL;
@@ -205,15 +201,26 @@ export function diagnose(msg = "") {
 export const clampStr = (v, max) => String(v ?? "").trim().slice(0, max);
 export const id = () => crypto.randomBytes(9).toString("base64url");
 
-const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // no 0/O/1/I/L
+const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 function codeBlocks(prefix, blocks, len) {
   const block = () => Array.from({ length: len }, () => CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)]).join("");
   return `${prefix}-` + Array.from({ length: blocks }, block).join("-");
 }
-// Admin: 4 blocks of 5  ->  ~20 random chars. Far beyond brute-forcing with rate limits in place.
-export const adminCode = () => codeBlocks("GATH", 4, 5);
-// Executive: 6 blocks of 6  ->  ~36 random chars. Much longer again.
+// Admin access code: 5 blocks of 6 -> ~30 random chars. Long, single-use,
+// and only ever stored hashed. There is intentionally NO executive code
+// generator: executive is claimed once via EXEC_SETUP_CODE and assigned by
+// an existing executive. Admins answer/resolve tickets and run small functions only.
+export const adminCode = () => codeBlocks("GATH", 5, 6);
+// Retained for backward compatibility only; no longer generated anywhere.
 export const execCode = () => codeBlocks("GEXE", 6, 6);
+
+// Access codes are never stored in plaintext. We persist an HMAC of the code so a
+// leaked blob store cannot reveal a working code. Generated codes also expire.
+export const CODE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+export function hashCode(code) {
+  return crypto.createHmac("sha256", secret()).update(`code:${String(code).trim().toUpperCase()}`).digest("base64url");
+}
+export const codeFingerprint = (code) => `${String(code).slice(0, 4)}-••••-${hashCode(code).slice(0, 4).toUpperCase()}`;
 
 /* =========================================================================
    DISCORD (bot REST) HELPERS
@@ -229,7 +236,6 @@ export async function discordBotFetch(path, opts = {}, ms = 8000) {
 export const guildId = () => process.env.GATHERLY_GUILD_ID || null;
 export const blacklistRoleId = () => process.env.BLACKLIST_ROLE_ID || BLACKLIST_ROLE_ID_DEFAULT;
 
-// true / false / null(unknown or not configured)
 export async function isGuildMember(discordId) {
   const gid = guildId();
   if (!gid || !discordId) return null;
@@ -253,7 +259,6 @@ export async function removeGuildRole(discordId, roleId = blacklistRoleId()) {
   try { return (await discordBotFetch(`/guilds/${gid}/members/${discordId}/roles/${roleId}`, { method: "DELETE" })).ok; } catch { return false; }
 }
 
-// Sends a DM. Pass `components` for buttons. Returns { ok, channelId }.
 export async function dmUserEmbed(discordId, embed, components = null) {
   if (!process.env.DISCORD_BOT_TOKEN || !discordId) return { ok: false };
   try {
@@ -274,7 +279,6 @@ export async function postDiscordWebhook(webhookUrl, payload) {
   } catch { return false; }
 }
 
-// Shared brand bits for embeds.
 export const BRAND = {
   color: 0x7fa8ff,
   green: 0x69d99c,
@@ -286,8 +290,6 @@ export const BRAND = {
 
 /* =========================================================================
    AI HELPERS (Anthropic)
-   - aiText: generic completion
-   - aiModerateEvent: gate an event listing before it is published
    ========================================================================= */
 async function anthropic(messages, { model = "claude-haiku-4-5-20251001", max_tokens = 400, system } = {}) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -307,24 +309,9 @@ async function anthropic(messages, { model = "claude-haiku-4-5-20251001", max_to
 
 export async function aiText(prompt, opts = {}) { return anthropic([{ role: "user", content: prompt }], opts); }
 
-// Returns { allowed, reason, skipped }.
-// Fails OPEN on infrastructure errors (missing key / API blip) so a real outage
-// never bricks listings, but records skipped=true. Explicit AI "no" => blocked.
 export async function aiModerateEvent(ev = {}) {
   if (!process.env.ANTHROPIC_API_KEY) return { allowed: true, reason: null, skipped: true };
-  const prompt = `You are a strict content moderator for "Gatherly", a public events board for the Roblox game ER:LC (Emergency Response: Liberty County) private-server roleplay community. Decide whether the following event listing may be published.
-
-BLOCK the listing if it contains or implies ANY of: sexual or NSFW content, profanity or slurs, harassment or hate, real-world violence or threats, advertising or content unrelated to ER:LC, scams, or fake / troll events that are not genuine ER:LC roleplay.
-ALLOW normal ER:LC roleplay events such as patrols, scenarios, car shows, court sessions, training, tryouts, and similar.
-
-Listing:
-Title: ${clampStr(ev.title, 200)}
-Scenario: ${clampStr(ev.scenario, 200)}
-Description: ${clampStr(ev.description || ev.desc, 1500)}
-Server code: ${clampStr(ev.code, 60)}
-
-Reply with ONLY a compact JSON object and nothing else, no markdown:
-{"allowed": true or false, "reason": "short reason shown to the user if blocked, empty string if allowed"}`;
+  const prompt = `You are a strict content moderator for "Gatherly", a public events board for the Roblox game ER:LC (Emergency Response: Liberty County) private-server roleplay community. Decide whether the following event listing may be published.\n\nBLOCK the listing if it contains or implies ANY of: sexual or NSFW content, profanity or slurs, harassment or hate, real-world violence or threats, advertising or content unrelated to ER:LC, scams, or fake / troll events that are not genuine ER:LC roleplay.\nALLOW normal ER:LC roleplay events such as patrols, scenarios, car shows, court sessions, training, tryouts, and similar.\n\nListing:\nTitle: ${clampStr(ev.title, 200)}\nScenario: ${clampStr(ev.scenario, 200)}\nDescription: ${clampStr(ev.description || ev.desc, 1500)}\nServer code: ${clampStr(ev.code, 60)}\n\nReply with ONLY a compact JSON object and nothing else, no markdown:\n{"allowed": true or false, "reason": "short reason shown to the user if blocked, empty string if allowed"}`;
   const out = await anthropic([{ role: "user", content: prompt }], { max_tokens: 200 });
   if (!out) return { allowed: true, reason: null, skipped: true };
   try {
@@ -339,7 +326,6 @@ Reply with ONLY a compact JSON object and nothing else, no markdown:
 
 /* =========================================================================
    STRIPE WEBHOOK SIGNATURE VERIFICATION
-   Verifies the `stripe-signature` header over the RAW request body.
    ========================================================================= */
 export function verifyStripeSignature(rawBody, sigHeader, webhookSecret, toleranceSec = 300) {
   if (!sigHeader || !webhookSecret) return false;
@@ -352,7 +338,7 @@ export function verifyStripeSignature(rawBody, sigHeader, webhookSecret, toleran
 }
 
 /* =========================================================================
-   BLOB-BACKED CACHE  (replaces the in-memory Map that never persisted)
+   BLOB-BACKED CACHE
    ========================================================================= */
 export async function cacheGet(key) {
   try {
@@ -368,8 +354,6 @@ export async function cacheSet(key, val, ttlSec = 30) {
 
 /* =========================================================================
    PLANS / CREDITS / SUBSCRIPTION LIFECYCLE
-   - eventCap: how many events the user may LIST per month
-   - monthlyCredits: boost credits refreshed each month while subscribed
    ========================================================================= */
 export const PLAN_INFO = {
   free:  { id: "free",  name: "Gatherly",       level: 0, monthlyCredits: 0,                    eventCap: EVENT_CAP_FREE  },
@@ -391,24 +375,17 @@ export const planCap = (plan) => PLAN_INFO[normalizePlan(plan)].eventCap;
 
 export const monthKey = (d = new Date()) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 
-// A subscription counts as active if: lifetime, OR an admin/robux grant with no expiry,
-// OR a stripe plan whose planExpiresAt is still in the future.
 export function subscriptionActive(user) {
   if (!user) return false;
   if (user.lifetime || user.planVia === "lifetime") return normalizePlan(user.plan) !== "free";
   if (normalizePlan(user.plan) === "free") return false;
-  if (!user.planExpiresAt) return true; // admin/robux grant without an explicit expiry
+  if (!user.planExpiresAt) return true;
   return new Date(user.planExpiresAt).getTime() > Date.now();
 }
 
-// The plan whose FEATURES apply right now. Past reports stay readable regardless,
-// because they are stored on each event, but feature gates use this.
 export function effectivePlan(user) { return subscriptionActive(user) ? normalizePlan(user.plan) : "free"; }
 export const effectiveLevel = (user) => PLAN_INFO[effectivePlan(user)].level;
 
-// Monthly credit handling. Returns { user, changed }; the caller persists if changed.
-// While subscribed, the start of a new month refreshes credits to the plan allotment.
-// If the subscription has lapsed, existing credits are kept and never topped up again.
 export function monthlyResetIfDue(user) {
   if (!user) return { user, changed: false };
   const mk = monthKey();
@@ -423,3 +400,70 @@ export function monthlyResetIfDue(user) {
 export const canCreateEvent = (user, usedThisMonth) => usedThisMonth < planCap(effectivePlan(user));
 
 export const isSupportBlacklisted = (u) => Boolean(u && u.supportBlacklist && u.supportBlacklist.active);
+
+/* =========================================================================
+   ADVERTISING — pricing, safety scanning, rotation config
+   ========================================================================= */
+export const AD_PACKS = {
+  3:  { days: 3,  amount: 500,  label: "3-day placement"  },
+  7:  { days: 7,  amount: 1000, label: "7-day placement"  },
+  14: { days: 14, amount: 1800, label: "14-day placement" },
+};
+export const TOTAL_AD_SLOTS = 12;
+
+export const DEFAULT_AD_CONFIG = { rotateSec: 8, houseWeight: 4, advertiserWeight: 1, slots: TOTAL_AD_SLOTS };
+export async function getAdConfig() {
+  const c = (await miscStore().get("adConfig", { type: "json" })) || {};
+  return { ...DEFAULT_AD_CONFIG, ...c };
+}
+
+const SUSPICIOUS_TLDS = [".zip", ".mov", ".xyz", ".top", ".gq", ".tk", ".ml", ".cf", ".ru", ".click", ".country", ".kim", ".work"];
+const URL_SHORTENERS = ["bit.ly", "tinyurl.com", "goo.gl", "t.co", "is.gd", "cutt.ly", "rb.gy", "shorturl", "rebrand.ly", "ow.ly", "discord.gg/"];
+const BANNED_WORDS = ["free robux", "free nitro", "giveaway scam", "login to claim", "steam gift", "crypto", "casino", "porn", "nsfw", "nude"];
+
+export function scanAdSafety({ link = "", title = "", image = "" } = {}) {
+  const reasons = [];
+  let url;
+  try { url = new URL(link); } catch { return { ok: false, flagged: true, reasons: ["The destination link is not a valid URL."] }; }
+  if (!/^https?:$/.test(url.protocol)) reasons.push("Link is not http(s).");
+  const host = url.hostname.toLowerCase();
+  if (SUSPICIOUS_TLDS.some((t) => host.endsWith(t))) reasons.push(`Destination uses a high-risk TLD (${host}).`);
+  if (URL_SHORTENERS.some((s) => link.toLowerCase().includes(s))) reasons.push("Link uses a redirect/shortener that hides the real destination.");
+  if (image && !/^https?:\/\//i.test(image)) reasons.push("Creative image is not an http(s) URL.");
+  const hay = `${title} ${link}`.toLowerCase();
+  for (const w of BANNED_WORDS) if (hay.includes(w)) reasons.push(`Contains flagged term: "${w}".`);
+  if (/@/.test(url.pathname + url.search)) reasons.push("Link contains an '@' which can disguise the true host.");
+  return { ok: reasons.length === 0, flagged: reasons.length > 0, reasons };
+}
+
+export async function aiModerateAd(ad = {}) {
+  if (!process.env.ANTHROPIC_API_KEY) return { allowed: true, reason: null, skipped: true };
+  const prompt = `You are a strict ad reviewer for "Gatherly", a public board for the Roblox game ER:LC. Decide if this paid advertisement may run.\nBLOCK if it contains or implies: scams, phishing, "free robux/nitro", malware, NSFW, hate/harassment, real-world violence, deceptive claims, or links that clearly do not match the advertised text.\nALLOW normal promotion of ER:LC servers, Discord communities, creators, and game-related products.\nTitle: ${clampStr(ad.title, 200)}\nDestination link: ${clampStr(ad.link, 300)}\nReply with ONLY compact JSON: {"allowed": true/false, "reason": "short reason if blocked, else empty"}`;
+  const out = await anthropic([{ role: "user", content: prompt }], { max_tokens: 160 });
+  if (!out) return { allowed: true, reason: null, skipped: true };
+  try {
+    const p = JSON.parse(out.replace(/```json|```/g, "").trim());
+    return { allowed: Boolean(p.allowed), reason: p.allowed ? null : clampStr(p.reason || "Did not pass automated review.", 300), skipped: false };
+  } catch { return { allowed: true, reason: null, skipped: true }; }
+}
+
+/* =========================================================================
+   STAFF EVENT WEBHOOK (Update 6)
+   ========================================================================= */
+export function brandEmbed({ title, description, color = BRAND.color, fields = [], url, thumbnail, footer = "Gatherly Automation" } = {}) {
+  const e = { title, description, color, timestamp: new Date().toISOString(), footer: { text: footer, icon_url: BRAND.logo } };
+  if (url) e.url = url;
+  if (fields.length) e.fields = fields.slice(0, 25);
+  if (thumbnail) e.thumbnail = { url: thumbnail };
+  return e;
+}
+
+export async function postStaffEvent(embed, links = []) {
+  const url = process.env.STAFF_WEBHOOK_URL || process.env.WATCHDOG_WEBHOOK_URL;
+  if (!url) return false;
+  const e = { ...embed };
+  if (links.length) {
+    e.fields = [...(e.fields || []), { name: "Open", value: links.map((b) => `[${b.label}](${b.url})`).join(" · ").slice(0, 1000), inline: false }];
+  }
+  return postDiscordWebhook(url, { username: "Gatherly", avatar_url: BRAND.logo, embeds: [e] });
+}
