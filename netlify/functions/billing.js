@@ -18,11 +18,13 @@ const STRIPE_PRICE_ENV = {
 };
 
 // "Gatherly Custom" one-off boost-credit packs. Amounts are in the smallest
-// currency unit (cents). Bulk packs are cheaper per credit. Tune freely.
+// currency unit (cents). Note: top-up credits only affect discovery-feed boosting
+// — they never change the depth of analytics in a report (that is fixed by the
+// subscription plan).
 const CREDIT_PACKS = {
-  3:  { credits: 3,  amount: 300,  label: "3 boost credits"  },
-  5:  { credits: 5,  amount: 450,  label: "5 boost credits"  },
-  10: { credits: 10, amount: 800,  label: "10 boost credits" },
+  3:  { credits: 3,  amount: 399,  label: "3 boost credits"  },
+  6:  { credits: 6,  amount: 699,  label: "6 boost credits"  },
+  12: { credits: 12, amount: 1199, label: "12 boost credits" },
 };
 const CURRENCY = (process.env.STRIPE_CURRENCY || "usd").toLowerCase();
 
@@ -72,8 +74,6 @@ async function handler(req) {
     const priceId = envName ? process.env[envName] : null;
     if (!sk || !priceId) return json({ error: `Card payments for ${PLAN_INFO[plan].name} (${cycle}) aren't configured yet. Admin: set STRIPE_SECRET_KEY and ${envName} in Netlify env vars.` }, 400);
 
-    // Note: we intentionally do NOT block users who already have a plan. Switching
-    // monthly -> annual (or Pro -> Ultra) is a normal upgrade and goes straight to checkout.
     const mode = cycle === "lifetime" ? "payment" : "subscription";
     const params = {
       mode,
@@ -87,7 +87,6 @@ async function handler(req) {
       "metadata[cycle]": cycle,
       "metadata[kind]": "plan",
     };
-    // Reuse an existing Stripe customer so we don't create duplicates on re-purchase.
     if (user.stripeCustomerId) params.customer = user.stripeCustomerId;
 
     const { ok, d } = await stripeCheckout(params);
@@ -102,7 +101,7 @@ async function handler(req) {
 
     const b = await req.json().catch(() => ({}));
     const pack = CREDIT_PACKS[parseInt(b.pack, 10)];
-    if (!pack) return json({ error: "Choose a pack of 3, 5, or 10 credits." }, 400);
+    if (!pack) return json({ error: "Choose a pack of 3, 6, or 12 credits." }, 400);
     const sk = process.env.STRIPE_SECRET_KEY;
     if (!sk) return json({ error: "Card payments aren't configured yet. Admin: set STRIPE_SECRET_KEY." }, 400);
 
