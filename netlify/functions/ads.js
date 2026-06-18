@@ -58,9 +58,9 @@ async function handler(req) {
     const all = await loadAll();
     const running = all.filter(isRunning).map((a) => ({ id: a.id, title: a.title, image: a.image, link: a.link }));
     const config = await getAdConfig();
-    const house = (await miscStore().get("houseAds", { type: "json" })) || [
-      { id: "house-pricing", title: "Go Ultra — every analytic, every event", image: null, link: "/pricing", house: true },
-      { id: "house-advertise", title: "Advertise your community on Gatherly", image: null, link: "/advertisers", house: true },
+    const houseRaw = (await miscStore().get("houseAds", { type: "json" })) || [
+      { id: "house-pricing", title: "Go Ultra — every analytic, every event", image: null, link: "/pricing", house: true, kind: "gatherly", enabled: true },
+      { id: "house-advertise", title: "Advertise your community on Gatherly", image: null, link: "/advertisers", house: true, kind: "gatherly", enabled: true },
     ];
     return json({ config, ads: running, house });
   }
