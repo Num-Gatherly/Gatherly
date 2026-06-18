@@ -47,6 +47,16 @@
     <span class="kicker">Control panel</span>
     <h1 style="font-size:clamp(2rem,4vw,3rem)">Staff control</h1>
     <p style="margin-top:8px" id="role">Checking access&hellip;</p>
+    <div id="execClaimBox" style="display:none;margin-top:14px;max-width:460px">
+      <div class="card">
+        <p style="font-size:.85rem;margin-bottom:10px">Some tabs below (Ads, News, Users, Events, Announcements, Notifications, Executive) only show for <b>Executive</b> staff. Your account is currently <b>Admin</b>. If you have the executive setup code, enter it here to upgrade this account.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="execClaimCode" class="input" placeholder="Executive setup code" style="flex:1;min-width:180px">
+          <button class="btn btn-primary btn-sm" onclick="claimExec()">Unlock executive access</button>
+        </div>
+        <div id="execClaimMsg" style="margin-top:10px"></div>
+      </div>
+    </div>
   </div>
 </header>
 
