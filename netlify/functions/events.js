@@ -3,7 +3,7 @@
 // event (cached, capped at 40), and flagged listings forwarded to a review channel.
 import {
   json, eventsStore, requireUser, usersStore, id, clampStr, guard, audit, auditError, decrypt,
-  aiModerateEvent, effectivePlan, planCap, planName, cacheGet, cacheSet, monthKey,
+  aiModerateEvent, effectivePlan, planCap, effectiveListingCap, planName, cacheGet, cacheSet, monthKey,
   postDiscordWebhook, BRAND, PLAYER_CAP,
 } from "../lib/util.js";
 
@@ -163,7 +163,7 @@ async function handler(req) {
   // How many listings the user has left this month (for the advertise page).
   if (action === "quota") {
     const used = eventsThisMonth(await allEvents(), user.id);
-    const cap = planCap(effectivePlan(user));
+    const cap = effectiveListingCap(user);
     return json({ used, cap, remaining: Math.max(0, cap - used), plan: effectivePlan(user), planName: planName(effectivePlan(user)) });
   }
 
@@ -200,7 +200,7 @@ async function handler(req) {
 
     // Monthly listing cap by plan (6 / 14 / 21). Not a watchdog trip, just a limit.
     const used = eventsThisMonth(await allEvents(), user.id);
-    const cap = planCap(effectivePlan(user));
+    const cap = effectiveListingCap(user);
     if (used >= cap) {
       return json({ error: `You have used all ${cap} of your monthly listings on the ${planName(effectivePlan(user))} plan. Upgrade for more, or wait until next month.`, capReached: true, used, cap }, 403);
     }
