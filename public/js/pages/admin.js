@@ -86,6 +86,7 @@ async function loadAds() {
     if ($("adRotateSec")) $("adRotateSec").value = c.rotateSec;
     if ($("adHouseWeight")) $("adHouseWeight").value = c.houseWeight;
     if ($("adAdvWeight")) $("adAdvWeight").value = c.advertiserWeight;
+    loadHouseAds();
   } catch (e) { host.innerHTML = `<p style="color:var(--bad,#ff7a7a)">${esc(e.message)}</p>`; }
 }
 window.approveAd = async (id) => { try { await api("/api/ads?action=approve", { method: "POST", body: { id } }); loadAds(); } catch (e) { alert(e.message); } };
@@ -96,6 +97,97 @@ window.saveAdConfig = async () => {
     await api("/api/ads?action=config", { method: "POST", body: { rotateSec: +$("adRotateSec").value, houseWeight: +$("adHouseWeight").value, advertiserWeight: +$("adAdvWeight").value } });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Rotation saved.</div>`;
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+/* ---- House ads (Gatherly + ASB) ---- */
+let houseAdsCache = [];
+async function loadHouseAds() {
+  const host = $("houseAdList");
+  if (!host) return;
+  host.innerHTML = `<p style="color:var(--muted)">Loading&hellip;</p>`;
+  try {
+    const d = await api("/api/admin?action=house-ads");
+    const ads = d.houseAds || [];
+    houseAdsCache = ads;
+    if (!ads.length) { host.innerHTML = `<p style="color:var(--muted)">No house ads yet. Add one on the right.</p>`; return; }
+    host.innerHTML = ads.map((a) => {
+      const kindLabel = a.kind === "asb" ? "ASB Advertising" : "Gatherly";
+      const off = a.enabled === false;
+      return `<div class="house-ad-card${off ? " off" : ""}">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+          <div style="flex:1;min-width:0">
+            <span class="badge ${a.kind === "asb" ? "" : "badge-good"}">${esc(kindLabel)}</span>
+            <strong style="display:block;margin-top:6px">${esc(a.title || "Untitled")}</strong>
+            ${a.subtitle ? `<div style="font-size:.82rem;color:var(--muted);margin-top:2px">${esc(a.subtitle)}</div>` : ""}
+            ${a.link ? `<div style="font-size:.78rem;margin-top:4px"><a href="${esc(a.link)}" target="_blank" rel="noopener nofollow">${esc(a.link)}</a></div>` : ""}
+            ${a.image ? `<img src="${esc(a.image)}" alt="" onerror="this.style.display='none'">` : ""}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="editHouseAd('${esc(a.id)}')">Edit</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleHouseAd('${esc(a.id)}',${off})">${off ? "Enable" : "Disable"}</button>
+            <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" onclick="deleteHouseAd('${esc(a.id)}')">Delete</button>
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (e) { host.innerHTML = `<p style="color:var(--bad,#ff7a7a)">${esc(e.message)}</p>`; }
+}
+
+window.clearHouseAd = () => {
+  ["houseAdId", "houseAdTitle", "houseAdSubtitle", "houseAdImage", "houseAdLink"].forEach((k) => { if ($(k)) $(k).value = ""; });
+  if ($("houseAdKind")) $("houseAdKind").value = "gatherly";
+  if ($("houseAdEnabled")) $("houseAdEnabled").checked = true;
+  if ($("houseAdFormTitle")) $("houseAdFormTitle").textContent = "Add house ad";
+  const msg = $("houseAdMsg"); if (msg) msg.innerHTML = "";
+};
+
+window.editHouseAd = (adId) => {
+  const a = houseAdsCache.find((x) => x.id === adId);
+  if (!a) return;
+  if ($("houseAdId")) $("houseAdId").value = a.id || "";
+  if ($("houseAdKind")) $("houseAdKind").value = a.kind === "asb" ? "asb" : "gatherly";
+  if ($("houseAdTitle")) $("houseAdTitle").value = a.title || "";
+  if ($("houseAdSubtitle")) $("houseAdSubtitle").value = a.subtitle || "";
+  if ($("houseAdImage")) $("houseAdImage").value = a.image || "";
+  if ($("houseAdLink")) $("houseAdLink").value = a.link || "";
+  if ($("houseAdEnabled")) $("houseAdEnabled").checked = a.enabled !== false;
+  if ($("houseAdFormTitle")) $("houseAdFormTitle").textContent = "Edit house ad";
+  const msg = $("houseAdMsg"); if (msg) msg.innerHTML = "";
+};
+
+window.saveHouseAd = async () => {
+  const msg = $("houseAdMsg");
+  const body = {
+    id: $("houseAdId")?.value || undefined,
+    kind: $("houseAdKind")?.value || "gatherly",
+    title: $("houseAdTitle")?.value?.trim(),
+    subtitle: $("houseAdSubtitle")?.value?.trim(),
+    image: $("houseAdImage")?.value?.trim(),
+    link: $("houseAdLink")?.value?.trim(),
+    enabled: $("houseAdEnabled")?.checked,
+  };
+  if (!body.title) { if (msg) msg.innerHTML = `<div class="alert alert-err">A title is required.</div>`; return; }
+  try {
+    await api("/api/admin?action=house-ad-save", { method: "POST", body });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">House ad saved.</div>`;
+    window.clearHouseAd();
+    loadHouseAds();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.toggleHouseAd = async (id, currentlyOff) => {
+  try {
+    await api("/api/admin?action=house-ad-save", { method: "POST", body: { id, enabled: currentlyOff } });
+    loadHouseAds();
+  } catch (e) { alert(e.message); }
+};
+
+window.deleteHouseAd = async (id) => {
+  if (!confirm("Delete this house ad? This cannot be undone.")) return;
+  try {
+    await api("/api/admin?action=house-ad-delete", { method: "POST", body: { id } });
+    loadHouseAds();
+  } catch (e) { alert(e.message); }
 };
 
 /* ========================== NEWS ========================== */
@@ -121,7 +213,9 @@ async function loadNews() {
 
 window.newArticle = () => {
   ["newsId", "newsTitleInput", "newsAuthor", "newsAvatar", "newsBanner", "newsExcerpt", "newsBlocks"].forEach((k) => { if ($(k)) $(k).value = ""; });
+  if ($("newsBody")) $("newsBody").innerHTML = "";
   if ($("newsPublished")) $("newsPublished").checked = false;
+  const msg = $("newsMsg"); if (msg) msg.innerHTML = "";
 };
 
 window.editNews = async (id) => {
@@ -135,28 +229,26 @@ window.editNews = async (id) => {
     $("newsAvatar").value = a.authorAvatar || "";
     $("newsBanner").value = a.banner || "";
     $("newsExcerpt").value = a.excerpt || "";
-    $("newsBlocks").value = (a.blocks || []).map((b) => b.type === "image" ? `img:${b.value}` : b.type === "heading" ? `h:${b.value}` : b.value).join("\n");
+    $("newsBody").innerHTML = blocksToHtml(a.blocks || []);
     $("newsPublished").checked = Boolean(a.published);
+    const msg = $("newsMsg"); if (msg) msg.innerHTML = "";
   } catch (e) { alert(e.message); }
 };
 
-function parseBlocks(text) {
-  const lines = String(text || "").split(/\n/);
-  const out = [];
-  let buf = [];
-  const flush = () => { if (buf.length) { out.push({ type: "text", value: buf.join("\n").trim() }); buf = []; } };
-  for (const l of lines) {
-    if (/^img:\s*/i.test(l)) { flush(); out.push({ type: "image", value: l.replace(/^img:\s*/i, "").trim() }); continue; }
-    if (/^h:\s*/i.test(l)) { flush(); out.push({ type: "heading", value: l.replace(/^h:\s*/i, "").trim() }); continue; }
-    if (l.trim() === "") { flush(); continue; }
-    buf.push(l);
-  }
-  flush();
-  return out.filter((b) => b.value);
+// Rebuild editor HTML from stored blocks (handles legacy text/heading/image blocks too).
+function blocksToHtml(blocks) {
+  return blocks.map((b) => {
+    if (b.type === "html") return b.value;
+    if (b.type === "image") return `<img src="${esc(b.value)}" alt="">`;
+    if (b.type === "heading") return `<h2>${esc(b.value)}</h2>`;
+    return `<p>${esc(b.value).replace(/\n/g, "<br>")}</p>`;
+  }).join("");
 }
 
 window.saveNews = async () => {
   const msg = $("newsMsg");
+  const html = ($("newsBody")?.innerHTML || "").trim();
+  const blocks = html ? [{ type: "html", value: html }] : [];
   const body = {
     id: $("newsId").value || undefined,
     title: $("newsTitleInput").value.trim(),
@@ -164,7 +256,7 @@ window.saveNews = async () => {
     authorAvatar: $("newsAvatar").value.trim(),
     banner: $("newsBanner").value.trim(),
     excerpt: $("newsExcerpt").value.trim(),
-    blocks: parseBlocks($("newsBlocks").value),
+    blocks,
     published: $("newsPublished").checked,
   };
   if (!body.title) { if (msg) msg.innerHTML = `<div class="alert alert-err">Title is required.</div>`; return; }
@@ -384,6 +476,15 @@ function openUser(id, u) {
         <button class="btn btn-ghost btn-sm" onclick="adjustCredits('${esc(id)}','credits-set')">Set</button>
       </div>
 
+      <div style="margin-bottom:10px">
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Listing cap: <b>${u.effectiveCap === Infinity || u.effectiveCap === null ? "unlimited" : esc(String(u.effectiveCap))}</b> ${u.listingCapOverride !== null && u.listingCapOverride !== undefined ? `(override, plan default ${esc(String(u.planCapDefault))})` : `(plan default)`}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="listingCapAmt" type="number" min="0" class="input" placeholder="Max listings" style="width:120px">
+          <button class="btn btn-ghost btn-sm" onclick="setListingCap('${esc(id)}')">Set cap</button>
+          <button class="btn btn-ghost btn-sm" onclick="setListingCap('${esc(id)}',true)">Reset to plan</button>
+        </div>
+      </div>
+
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <button class="btn btn-ghost btn-sm" onclick="toggleSuspend('${esc(id)}',${!u.suspended})">${u.suspended ? "Unsuspend" : "Suspend"}</button>
         <button class="btn btn-ghost btn-sm" onclick="wipeListings('${esc(id)}')">Wipe listings</button>
@@ -426,6 +527,23 @@ window.adjustCredits = async (id, action) => {
   try {
     const d = await api(`/api/admin?action=${action}`, { method: "POST", body: { userId: id, amount } });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Credits updated. New total: ${d.credits}</div>`;
+    loadUsers();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+window.setListingCap = async (id, reset) => {
+  const msg = $("userMsg");
+  const body = { userId: id };
+  if (reset) { body.reset = true; }
+  else {
+    const v = $("listingCapAmt")?.value;
+    if (v === "" || v === undefined) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter a cap, or use Reset to plan.</div>`; return; }
+    body.cap = v;
+  }
+  try {
+    const d = await api("/api/admin?action=set-listing-cap", { method: "POST", body });
+    const capText = d.effectiveCap === null || d.effectiveCap === undefined ? "unlimited" : d.effectiveCap;
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Listing cap ${reset ? "reset to plan default" : "updated"}. Effective cap: ${esc(String(capText))}.</div>`;
     loadUsers();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
@@ -681,5 +799,40 @@ if (searchInput) {
     debounce = setTimeout(() => loadUsers(searchInput.value), 300);
   });
 }
+
+/* ========================== RICH TEXT EDITOR ========================== */
+function initRichText() {
+  const toolbar = $("rtToolbar");
+  const editor = $("newsBody");
+  if (!toolbar || !editor) return;
+  const exec = (cmd, val = null) => { editor.focus(); document.execCommand(cmd, false, val); };
+
+  toolbar.querySelectorAll(".rt-btn").forEach((btn) => {
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", () => {
+      if (btn.dataset.cmd) exec(btn.dataset.cmd);
+      else if (btn.dataset.align) exec("justify" + btn.dataset.align.charAt(0).toUpperCase() + btn.dataset.align.slice(1));
+    });
+  });
+
+  const rtLink = $("rtLink");
+  if (rtLink) rtLink.addEventListener("click", () => {
+    const url = prompt("Link URL (https://...):");
+    if (url) exec("createLink", url);
+  });
+
+  const rtImage = $("rtImage");
+  if (rtImage) rtImage.addEventListener("click", () => {
+    const url = prompt("Image URL (https://...):");
+    if (url) exec("insertImage", url);
+  });
+
+  const rtBlock = $("rtBlock");
+  if (rtBlock) rtBlock.addEventListener("change", () => { exec("formatBlock", rtBlock.value); rtBlock.selectedIndex = 0; });
+
+  const rtSize = $("rtSize");
+  if (rtSize) rtSize.addEventListener("change", () => { if (rtSize.value) exec("fontSize", rtSize.value); rtSize.selectedIndex = 0; });
+}
+initRichText();
 
 init();
