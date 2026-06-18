@@ -1,10 +1,15 @@
-// /api/admin - control panel: users, credits, plans, roles, support blacklist,
-// events, announcements, notifications, audit + watchdog feed, access codes.
-// NEW: delete-account (executive only, max 5 per hour).
+// /api/admin - Control Room: checklist, support flags, users, credits, plans,
+// roles, listing caps, suspensions, support blacklist, events, announcements,
+// notifications, house ads (Gatherly + ASB), audit + watchdog feed, access codes.
+//
+// Safety: destructive moderation (suspend / blacklist) is rate-limited to 5 per
+// staff per day to blunt mass-raid abuse. Account deletion stays exec-only.
 import {
   json, requireUser, isStaff, isExec, usersStore, eventsStore, miscStore,
-  auditStore, codesStore, ticketsStore, audit, clampStr, adminCode, execCode,
-  normalizePlan, PLAN_INFO, guard, flagWatchdog, addGuildRole, removeGuildRole, monthKey,
+  auditStore, codesStore, ticketsStore, audit, clampStr, adminCode,
+  normalizePlan, PLAN_INFO, planCap, effectiveListingCap, guard, flagWatchdog,
+  addGuildRole, removeGuildRole, monthKey, id, postStaffEvent, brandEmbed,
+  hashCode, codeFingerprint, CODE_TTL_MS,
 } from "../lib/util.js";
 
 export default async (req) => {
@@ -16,6 +21,7 @@ async function handler(req) {
   const url = new URL(req.url);
   const action = url.searchParams.get("action");
 
+  /* ---------------- public: site content for banners/toasts --------------- */
   if (action === "content" && req.method === "GET") {
     const content = (await miscStore().get("siteContent", { type: "json" })) || {};
     const now = Date.now();
@@ -24,6 +30,7 @@ async function handler(req) {
     return json({ content: { ...content, announcements, notifications } });
   }
 
+  /* --------------------------- access codes (in) -------------------------- */
   if (action === "redeem-code" && req.method === "POST") {
     const user = await requireUser(req);
     if (!user) return json({ error: "Log in first." }, 401);
@@ -37,18 +44,19 @@ async function handler(req) {
     const codeStr = clampStr(b.code, 60).toUpperCase();
     if (!codeStr) return json({ error: "Enter your access code." }, 400);
     const store = codesStore();
-    const rec = await store.get(codeStr, { type: "json" });
-    if (!rec || rec.revoked) {
-      await audit(user, "code.redeem-failed", { code: codeStr });
-      return json({ error: "That code is not valid or has been revoked." }, 403);
+    const rec = await store.get(hashCode(codeStr), { type: "json" });
+    const expired = rec?.expiresAt && new Date(rec.expiresAt).getTime() < Date.now();
+    if (!rec || rec.revoked || expired) {
+      await audit(user, "code.redeem-failed", { fingerprint: codeFingerprint(codeStr) });
+      return json({ error: "That code is not valid, has expired, or has been revoked." }, 403);
     }
     const grant = rec.role === "executive" ? "executive" : "admin";
     await usersStore().setJSON(user.id, { ...user, role: grant, updatedAt: new Date().toISOString() });
     rec.redemptions = rec.redemptions || [];
     rec.redemptions.push({ userId: user.id, username: user.username, at: new Date().toISOString() });
     rec.lastRedeemedAt = new Date().toISOString();
-    await store.setJSON(codeStr, rec);
-    await audit({ ...user, role: grant }, "code.redeem-success", { code: codeStr, granted: grant });
+    await store.setJSON(hashCode(codeStr), rec);
+    await audit({ ...user, role: grant }, "code.redeem-success", { fingerprint: rec.fingerprint, granted: grant });
     return json({ ok: true, role: grant });
   }
 
@@ -68,6 +76,7 @@ async function handler(req) {
     return json({ ok: true, role: "executive" });
   }
 
+  /* ------------------------------ staff gate ------------------------------ */
   const user = await requireUser(req);
   if (!isStaff(user)) return json({ error: "Not found." }, 404);
   const evStore = eventsStore();
@@ -75,6 +84,55 @@ async function handler(req) {
 
   if (action === "whoami") return json({ id: user.id, username: user.username, globalName: user.globalName || user.username, role: user.role });
 
+  /* ------------------------------ CHECKLIST ------------------------------- */
+  if (action === "checklist") {
+    const tickets = (await listTickets()).filter((t) => t.status !== "closed");
+    const escalated = tickets.filter((t) => t.escalated);
+    const unclaimed = tickets.filter((t) => !t.assignedTo && !t.escalated);
+    const flags = (await listFlags()).filter((f) => !f.resolved);
+
+    const checklist = [
+      { label: "Open tickets", count: tickets.length, severity: tickets.length ? "warn" : "ok" },
+      { label: "Escalated", count: escalated.length, severity: escalated.length ? "high" : "ok" },
+      { label: "Security flags", count: flags.length, severity: flags.length ? "high" : "ok" },
+    ];
+
+    return json({
+      generatedAt: new Date().toISOString(),
+      pending: tickets.length + flags.length,
+      checklist,
+      flags: flags.slice(0, 50),
+      tickets: tickets
+        .sort((a, b) => (Number(b.escalated) - Number(a.escalated)) || (new Date(b.updatedAt) - new Date(a.updatedAt)))
+        .slice(0, 50)
+        .map((t) => ({ id: t.id, subject: t.subject, username: t.username, escalated: Boolean(t.escalated), assignedTo: t.assignedTo || null })),
+    });
+  }
+
+  if (action === "resolve-flag" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const rec = await auditStore().get(b.key, { type: "json" });
+    if (!rec) return json({ error: "Flag not found." }, 404);
+    await auditStore().setJSON(b.key, { ...rec, detail: { ...(rec.detail || {}), resolved: true, resolvedBy: user.username, resolvedAt: new Date().toISOString() } });
+    await audit(user, "watchdog.resolve", { key: b.key });
+    return json({ ok: true });
+  }
+
+  if (action === "escalate-flag" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const rec = await auditStore().get(b.key, { type: "json" });
+    if (!rec) return json({ error: "Flag not found." }, 404);
+    await auditStore().setJSON(b.key, { ...rec, detail: { ...(rec.detail || {}), escalatedFlag: true, escalatedBy: user.username, escalatedAt: new Date().toISOString() } });
+    await postStaffEvent(brandEmbed({
+      title: "Security flag escalated by staff",
+      description: `**${(rec.action || "flag").replace("watchdog.", "")}** escalated by ${user.username}.\n${clampStr(rec.detail?.what, 400) || ""}`,
+      color: 0xff7a7a,
+    }));
+    await audit(user, "watchdog.escalate", { key: b.key });
+    return json({ ok: true });
+  }
+
+  /* -------------------------------- USERS --------------------------------- */
   if (action === "users" || action === "users-search") {
     const q = (url.searchParams.get("q") || "").toLowerCase().trim();
     const { blobs } = await uStore.list();
@@ -86,47 +144,21 @@ async function handler(req) {
       u.id?.toLowerCase().includes(q) ||
       u.discordId?.toLowerCase().includes(q)
     ));
-    users = users.slice(0, 50).map((u) => ({
-      id: u.id,
-      // username = real Discord username (e.g. johndoe), globalName = display name
-      username: u.username,
-      globalName: u.globalName || u.username,
-      plan: normalizePlan(u.plan),
-      role: u.role || null,
-      credits: u.credits ?? 0,
-      suspended: Boolean(u.suspended),
-      supportBlacklisted: Boolean(u.supportBlacklist?.active),
-      createdAt: u.createdAt,
-      discordId: u.discordId,
-      avatar: u.avatar || null,
-    }));
+    users = users.slice(0, 50).map(publicUser);
     return json({ users });
   }
 
   if (action === "user-get") {
     const u = await uStore.get(url.searchParams.get("id"), { type: "json" });
     if (!u) return json({ error: "User not found." }, 404);
-    return json({ user: {
-      id: u.id,
-      username: u.username,
-      globalName: u.globalName || u.username,
-      plan: normalizePlan(u.plan),
-      role: u.role || null,
-      credits: u.credits ?? 0,
-      suspended: Boolean(u.suspended),
-      supportBlacklisted: Boolean(u.supportBlacklist?.active),
-      blacklistReason: u.supportBlacklist?.reason || null,
-      discordId: u.discordId,
-      avatar: u.avatar || null,
-    } });
+    return json({ user: { ...publicUser(u), blacklistReason: u.supportBlacklist?.reason || null } });
   }
 
-  // ---- Delete account (executive only, 5 per hour) ----
   if (action === "delete-account" && req.method === "POST") {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
-    const blocked = await guard(req, user, `delete-account:exec`, 5, 3600, {
+    const blocked = await guard(req, user, `delete-account:${user.id}`, 5, 3600, {
       kind: "account-deletion",
-      what: "Executive account deletion rate limit hit.",
+      what: "Executive account-deletion rate limit hit.",
       risk: "More than 5 accounts deleted in one hour by an executive.",
     });
     if (blocked) return blocked;
@@ -135,12 +167,10 @@ async function handler(req) {
     if (!targetId) return json({ error: "userId is required." }, 400);
     const target = await uStore.get(targetId, { type: "json" });
     if (!target) return json({ error: "User not found." }, 404);
-    // Wipe their event listings.
     const { blobs: evBlobs } = await evStore.list();
     const allEvs = await Promise.all(evBlobs.map((x) => evStore.get(x.key, { type: "json" })));
     let evRemoved = 0;
     for (const e of allEvs) if (e && e.userId === targetId) { await evStore.delete(e.id); evRemoved++; }
-    // Delete the user record.
     await uStore.delete(targetId);
     await audit(user, "user.delete-account", { targetId, targetUsername: target.username, eventsRemoved: evRemoved });
     return json({ ok: true, eventsRemoved: evRemoved });
@@ -177,6 +207,21 @@ async function handler(req) {
     return json({ ok: true, plan });
   }
 
+  if (action === "set-listing-cap" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const target = await uStore.get(b.userId, { type: "json" });
+    if (!target) return json({ error: "User not found." }, 404);
+    let override = null;
+    if (!b.reset && b.cap !== null && b.cap !== "" && b.cap !== undefined) {
+      const n = parseInt(b.cap, 10);
+      if (!Number.isFinite(n) || n < 0) return json({ error: "Enter a cap of 0 or more, or reset to the plan default." }, 400);
+      override = n;
+    }
+    await uStore.setJSON(b.userId, { ...target, listingCapOverride: override, updatedAt: new Date().toISOString() });
+    await audit(user, "user.set-listing-cap", { targetId: b.userId, cap: override });
+    return json({ ok: true, cap: override, effectiveCap: effectiveListingCap({ ...target, listingCapOverride: override }) });
+  }
+
   if (action === "set-role" && req.method === "POST") {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
     const b = await req.json().catch(() => ({}));
@@ -192,6 +237,14 @@ async function handler(req) {
     const b = await req.json().catch(() => ({}));
     const target = await uStore.get(b.userId, { type: "json" });
     if (!target) return json({ error: "User not found." }, 404);
+    if (b.suspended) {
+      const blocked = await guard(req, user, `cr-mod:${user.id}`, 5, 86400, {
+        kind: "mass-moderation",
+        what: "More than 5 suspend/blacklist actions in 24 hours.",
+        risk: "Possible mass moderation or a compromised staff account acting as a raid.",
+      });
+      if (blocked) return blocked;
+    }
     await uStore.setJSON(b.userId, { ...target, suspended: Boolean(b.suspended), suspendReason: clampStr(b.reason, 200) || null, updatedAt: new Date().toISOString() });
     await audit(user, b.suspended ? "user.suspend" : "user.unsuspend", { targetId: b.userId, reason: b.reason });
     return json({ ok: true, suspended: Boolean(b.suspended) });
@@ -201,6 +254,12 @@ async function handler(req) {
     const b = await req.json().catch(() => ({}));
     const target = await uStore.get(b.userId, { type: "json" });
     if (!target) return json({ error: "User not found." }, 404);
+    const blocked = await guard(req, user, `cr-mod:${user.id}`, 5, 86400, {
+      kind: "mass-moderation",
+      what: "More than 5 suspend/blacklist actions in 24 hours.",
+      risk: "Possible mass moderation or a compromised staff account acting as a raid.",
+    });
+    if (blocked) return blocked;
     const reason = clampStr(b.reason, 200) || "No reason provided.";
     await uStore.setJSON(b.userId, { ...target, supportBlacklist: { active: true, reason, by: user.username, at: new Date().toISOString() }, updatedAt: new Date().toISOString() });
     const roled = target.discordId ? await addGuildRole(target.discordId) : false;
@@ -229,6 +288,7 @@ async function handler(req) {
     return json({ ok: true, removed });
   }
 
+  /* -------------------------------- EVENTS -------------------------------- */
   if (action === "events") {
     const { blobs } = await evStore.list();
     const events = (await Promise.all(blobs.map((b) => evStore.get(b.key, { type: "json" })))).filter(Boolean);
@@ -262,6 +322,7 @@ async function handler(req) {
     return json({ ok: true });
   }
 
+  /* ---------------------------- ANNOUNCEMENTS ----------------------------- */
   if (action === "announce-add" && req.method === "POST") {
     const b = await req.json().catch(() => ({}));
     const text = clampStr(b.text, 240);
@@ -269,7 +330,14 @@ async function handler(req) {
     const content = (await miscStore().get("siteContent", { type: "json" })) || {};
     content.announcements = content.announcements || [];
     const mins = parseInt(b.durationMin, 10);
-    content.announcements.push({ id: adminCode().slice(5, 13), text, link: clampStr(b.link, 300) || null, expiresAt: Number.isFinite(mins) && mins > 0 ? new Date(Date.now() + mins * 60000).toISOString() : null, by: user.username, at: new Date().toISOString() });
+    const ctaText = clampStr(b.ctaText, 40);
+    const ctaLink = clampStr(b.ctaLink, 300);
+    content.announcements.push({
+      id: id().slice(0, 8), text, link: clampStr(b.link, 300) || null,
+      cta: ctaText && ctaLink ? { text: ctaText, link: ctaLink } : null,
+      expiresAt: Number.isFinite(mins) && mins > 0 ? new Date(Date.now() + mins * 60000).toISOString() : null,
+      by: user.username, at: new Date().toISOString(),
+    });
     await miscStore().setJSON("siteContent", content);
     await audit(user, "announce.add", { text });
     return json({ ok: true, announcements: content.announcements });
@@ -289,6 +357,7 @@ async function handler(req) {
     return json({ announcements: content.announcements || [] });
   }
 
+  /* ----------------------------- NOTIFICATIONS ---------------------------- */
   if (action === "notify-add" && req.method === "POST") {
     const b = await req.json().catch(() => ({}));
     const title = clampStr(b.title, 80), body = clampStr(b.body, 300);
@@ -296,7 +365,14 @@ async function handler(req) {
     const content = (await miscStore().get("siteContent", { type: "json" })) || {};
     content.notifications = content.notifications || [];
     const mins = parseInt(b.durationMin, 10);
-    content.notifications.push({ id: adminCode().slice(5, 13), title, body, link: clampStr(b.link, 300) || null, expiresAt: Number.isFinite(mins) && mins > 0 ? new Date(Date.now() + mins * 60000).toISOString() : null, by: user.username, at: new Date().toISOString() });
+    const image = clampStr(b.image, 400);
+    content.notifications.push({
+      id: id().slice(0, 8), title, body,
+      image: image && /^https?:\/\//i.test(image) ? image : null,
+      link: clampStr(b.link, 300) || null,
+      expiresAt: Number.isFinite(mins) && mins > 0 ? new Date(Date.now() + mins * 60000).toISOString() : null,
+      by: user.username, at: new Date().toISOString(),
+    });
     await miscStore().setJSON("siteContent", content);
     await audit(user, "notify.add", { title });
     return json({ ok: true, notifications: content.notifications });
@@ -311,6 +387,48 @@ async function handler(req) {
     return json({ ok: true, notifications: content.notifications });
   }
 
+  /* ------------------------- HOUSE ADS (Gatherly/ASB) --------------------- */
+  if (action === "house-ads") {
+    const list = (await miscStore().get("houseAds", { type: "json" })) || [];
+    return json({ houseAds: list });
+  }
+
+  if (action === "house-ad-save" && req.method === "POST") {
+    if (!isExec(user)) return json({ error: "Executive only." }, 403);
+    const b = await req.json().catch(() => ({}));
+    const list = (await miscStore().get("houseAds", { type: "json" })) || [];
+    const existing = b.id ? list.find((a) => a.id === b.id) : null;
+    const title = b.title !== undefined ? clampStr(b.title, 120) : existing?.title;
+    const link = b.link !== undefined ? clampStr(b.link, 300) : existing?.link;
+    if (!title) return json({ error: "A title is required." }, 400);
+    let image = b.image !== undefined ? (clampStr(b.image, 400) || null) : (existing?.image || null);
+    if (image && !/^https?:\/\//i.test(image)) return json({ error: "Image must be an https URL." }, 400);
+    const kind = b.kind !== undefined ? (b.kind === "asb" ? "asb" : "gatherly") : (existing?.kind || "gatherly");
+    const subtitle = b.subtitle !== undefined ? (clampStr(b.subtitle, 160) || null) : (existing?.subtitle || null);
+    const enabled = b.enabled !== undefined ? b.enabled !== false : (existing ? existing.enabled !== false : true);
+    const rec = {
+      id: existing ? existing.id : `house-${id().slice(0, 8)}`,
+      title, subtitle, image, link: link || null, kind,
+      house: true, enabled, updatedAt: new Date().toISOString(),
+      createdAt: existing?.createdAt || new Date().toISOString(),
+    };
+    if (existing) Object.assign(existing, rec); else list.push(rec);
+    await miscStore().setJSON("houseAds", list);
+    await audit(user, existing ? "ads.house-update" : "ads.house-create", { id: rec.id, kind });
+    return json({ ok: true, houseAds: list });
+  }
+
+  if (action === "house-ad-delete" && req.method === "POST") {
+    if (!isExec(user)) return json({ error: "Executive only." }, 403);
+    const b = await req.json().catch(() => ({}));
+    let list = (await miscStore().get("houseAds", { type: "json" })) || [];
+    list = list.filter((a) => a.id !== b.id);
+    await miscStore().setJSON("houseAds", list);
+    await audit(user, "ads.house-delete", { id: b.id });
+    return json({ ok: true, houseAds: list });
+  }
+
+  /* ------------------------------- CONTENT -------------------------------- */
   if (action === "set-content" && req.method === "POST") {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
     const b = await req.json().catch(() => ({}));
@@ -322,33 +440,50 @@ async function handler(req) {
     return json({ ok: true });
   }
 
+  /* -------------------------------- CODES --------------------------------- */
   if (action === "gen-code" && req.method === "POST") {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
-    const b = await req.json().catch(() => ({}));
-    const role = b.role === "executive" ? "executive" : "admin";
-    const code = role === "executive" ? execCode() : adminCode();
-    await codesStore().setJSON(code, { code, role, createdBy: user.id, createdAt: new Date().toISOString(), revoked: false, redemptions: [] });
-    await audit(user, "code.generate", { code, role });
-    return json({ ok: true, code });
+    const code = adminCode();
+    const expiresAt = new Date(Date.now() + CODE_TTL_MS).toISOString();
+    await codesStore().setJSON(hashCode(code), {
+      hash: hashCode(code), fingerprint: codeFingerprint(code), role: "admin",
+      createdBy: user.id, createdByName: user.username, createdAt: new Date().toISOString(),
+      expiresAt, revoked: false, redemptions: [],
+    });
+    await audit(user, "code.generate", { fingerprint: codeFingerprint(code), role: "admin" });
+    return json({ ok: true, code, expiresAt });
   }
 
   if (action === "revoke-code" && req.method === "POST") {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
     const b = await req.json().catch(() => ({}));
-    const rec = await codesStore().get(b.code, { type: "json" });
+    const key = clampStr(b.key, 200);
+    const rec = await codesStore().get(key, { type: "json" });
     if (!rec) return json({ error: "Code not found." }, 404);
-    await codesStore().setJSON(b.code, { ...rec, revoked: true, revokedAt: new Date().toISOString() });
-    await audit(user, "code.revoke", { code: b.code });
+    await codesStore().setJSON(key, { ...rec, revoked: true, revokedAt: new Date().toISOString() });
+    await audit(user, "code.revoke", { fingerprint: rec.fingerprint });
     return json({ ok: true });
   }
 
   if (action === "codes") {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
     const { blobs } = await codesStore().list();
-    const codes = await Promise.all(blobs.map((b) => codesStore().get(b.key, { type: "json" })));
-    return json({ codes: codes.filter(Boolean) });
+    const codes = (await Promise.all(blobs.map((b) => codesStore().get(b.key, { type: "json" })))).filter(Boolean);
+    const now = Date.now();
+    return json({
+      codes: codes.map((c) => ({
+        key: c.hash,
+        fingerprint: c.fingerprint,
+        role: c.role,
+        expiresAt: c.expiresAt,
+        expired: c.expiresAt ? new Date(c.expiresAt).getTime() < now : false,
+        revoked: Boolean(c.revoked),
+        redemptions: (c.redemptions || []).length,
+      })).sort((a, b) => new Date(b.expiresAt || 0) - new Date(a.expiresAt || 0)),
+    });
   }
 
+  /* ------------------------------- AUDIT ---------------------------------- */
   if (action === "audit" || action === "flagged") {
     const { blobs } = await auditStore().list();
     let entries = (await Promise.all(blobs.map((b) => auditStore().get(b.key, { type: "json" })))).filter(Boolean);
@@ -357,4 +492,52 @@ async function handler(req) {
   }
 
   return json({ error: "Unknown action." }, 404);
+
+  /* ------------------------------ helpers --------------------------------- */
+  function publicUser(u) {
+    return {
+      id: u.id,
+      username: u.username,
+      globalName: u.globalName || u.username,
+      plan: normalizePlan(u.plan),
+      role: u.role || null,
+      credits: u.credits ?? 0,
+      suspended: Boolean(u.suspended),
+      supportBlacklisted: Boolean(u.supportBlacklist?.active),
+      listingCapOverride: Number.isFinite(Number(u.listingCapOverride)) ? Number(u.listingCapOverride) : null,
+      planCapDefault: planCap(normalizePlan(u.plan)),
+      effectiveCap: effectiveListingCap(u),
+      createdAt: u.createdAt,
+      discordId: u.discordId,
+      avatar: u.avatar || null,
+    };
+  }
+
+  async function listTickets() {
+    const store = ticketsStore();
+    const { blobs } = await store.list();
+    return (await Promise.all(blobs.map((b) => store.get(b.key, { type: "json" })))).filter(Boolean);
+  }
+
+  async function listFlags() {
+    const { blobs } = await auditStore().list();
+    const entries = (await Promise.all(blobs.map(async (b) => {
+      const e = await auditStore().get(b.key, { type: "json" });
+      return e ? { ...e, _key: b.key } : null;
+    }))).filter(Boolean);
+    return entries
+      .filter((e) => (e.level === "warn" || e.detail?.watchdog) && !String(e.action || "").startsWith("watchdog.resolve") && !String(e.action || "").startsWith("watchdog.escalate"))
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .map((e) => ({
+        key: e._key,
+        action: e.action,
+        what: e.detail?.what || "Flagged activity.",
+        risk: e.detail?.risk || null,
+        aiResolution: e.detail?.aiResolution || e.detail?.fix || null,
+        actor: e.actor?.username || "anonymous",
+        at: e.at,
+        resolved: Boolean(e.detail?.resolved),
+        escalated: Boolean(e.detail?.escalatedFlag),
+      }));
+  }
 }
