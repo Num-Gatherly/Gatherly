@@ -6,8 +6,11 @@
 //             delete (POST)         -> remove an article
 //             admin-list            -> all articles incl. drafts
 //
-// Articles are built from ordered blocks so images can sit between paragraphs,
-// like a real reporting document.
+// Articles are ordered blocks. A block is one of:
+//   { type: "heading", value }      plain text heading
+//   { type: "image",   value }      https image URL
+//   { type: "text",    value }      plain paragraph
+//   { type: "html",    value }      rich text (bold, sizes, links, images) — sanitised
 import {
   json, requireUser, isExec, newsStore, audit, clampStr, id, guard,
   postStaffEvent, brandEmbed,
@@ -15,12 +18,58 @@ import {
 
 const slugify = (s) => clampStr(s, 80).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || id().slice(0, 8);
 
-// Sanitise editor blocks: text/heading keep plain text; image keeps an https URL.
+/* --------------------------- HTML sanitiser ----------------------------- */
+// Allowlist-based. Authors are executives (trusted), but we still strip scripts,
+// event handlers, and dangerous URLs as defence in depth.
+const ALLOWED_TAGS = new Set(["p", "br", "b", "strong", "i", "em", "u", "s", "strike", "h1", "h2", "h3", "h4", "ul", "ol", "li", "blockquote", "a", "span", "div", "img", "hr"]);
+const ALLOWED_ATTR = {
+  a: ["href", "target", "rel"], span: ["style"], div: ["style"], p: ["style"],
+  h1: ["style"], h2: ["style"], h3: ["style"], h4: ["style"], li: ["style"], img: ["src", "alt", "style"],
+};
+const STYLE_ALLOW = /^(font-size|font-weight|font-style|text-decoration|text-align|color)\s*:\s*[^;]+$/i;
+
+function sanitizeStyle(style) {
+  return String(style).split(";").map((s) => s.trim())
+    .filter((s) => STYLE_ALLOW.test(s) && !/url\(|expression|javascript:/i.test(s))
+    .join("; ");
+}
+
+function sanitizeHtml(html) {
+  if (!html) return "";
+  let out = String(html).replace(/<\s*(script|style|iframe|object|embed|svg|math|link|meta)[\s\S]*?<\s*\/\s*\1\s*>/gi, "");
+  out = out.replace(/<\/?([a-zA-Z0-9]+)((?:[^>"']|"[^"]*"|'[^']*')*)>/g, (m, tag, attrs) => {
+    tag = tag.toLowerCase();
+    if (!ALLOWED_TAGS.has(tag)) return "";
+    if (m.startsWith("</")) return `</${tag}>`;
+    const allow = ALLOWED_ATTR[tag] || [];
+    let safe = "";
+    const attrRe = /([a-zA-Z0-9-]+)\s*=\s*("([^"]*)"|'([^']*)')/g;
+    let am;
+    while ((am = attrRe.exec(attrs))) {
+      const name = am[1].toLowerCase();
+      let val = am[3] ?? am[4] ?? "";
+      if (!allow.includes(name)) continue;
+      if (name === "href" && !/^(https?:\/\/|\/|#|mailto:)/i.test(val)) continue;
+      if (name === "src" && !/^https?:\/\//i.test(val)) continue;
+      if ((name === "href" || name === "src") && /^\s*(javascript|data|vbscript):/i.test(val)) continue;
+      if (name === "style") { val = sanitizeStyle(val); if (!val) continue; }
+      if (name === "target") val = "_blank";
+      val = val.replace(/"/g, "&quot;");
+      safe += ` ${name}="${val}"`;
+    }
+    if (tag === "a" && /href=/.test(safe) && !/rel=/.test(safe)) safe += ` rel="noopener nofollow"`;
+    if (tag === "img" && !/src=/.test(safe)) return "";
+    return `<${tag}${safe}>`;
+  });
+  return out.replace(/\son\w+\s*=\s*("([^"]*)"|'([^']*)'|[^\s>]+)/gi, "").slice(0, 12000);
+}
+
 function cleanBlocks(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.slice(0, 60).map((b) => {
     if (b?.type === "image" && /^https?:\/\//i.test(b.value || "")) return { type: "image", value: clampStr(b.value, 500) };
     if (b?.type === "heading") return { type: "heading", value: clampStr(b.value, 160) };
+    if (b?.type === "html") return { type: "html", value: sanitizeHtml(clampStr(b.value, 12000)) };
     return { type: "text", value: clampStr(b.value, 4000) };
   }).filter((b) => b.value);
 }
@@ -31,10 +80,11 @@ async function loadAll() {
   return (await Promise.all(blobs.map((b) => store.get(b.key, { type: "json" })))).filter(Boolean);
 }
 
+const stripTags = (s) => String(s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 const summary = (a) => ({
   id: a.id, slug: a.slug, title: a.title, banner: a.banner || null,
   authorName: a.authorName || "Gatherly", authorAvatar: a.authorAvatar || null,
-  excerpt: a.excerpt || (a.blocks?.find((b) => b.type === "text")?.value || "").slice(0, 180),
+  excerpt: a.excerpt || stripTags(a.blocks?.find((b) => b.type === "text" || b.type === "html")?.value || "").slice(0, 180),
   publishedAt: a.publishedAt || a.createdAt, createdAt: a.createdAt,
 });
 
