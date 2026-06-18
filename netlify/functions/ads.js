@@ -1,4 +1,4 @@
-// /api/ads — the Gatherly advertising marketplace.
+// /api/ads - the Gatherly advertising marketplace.
 //
 //   Public:   active           -> approved+running ads for the on-site rotation
 //             impression (POST) -> +1 impression for an ad
@@ -59,9 +59,10 @@ async function handler(req) {
     const running = all.filter(isRunning).map((a) => ({ id: a.id, title: a.title, image: a.image, link: a.link }));
     const config = await getAdConfig();
     const houseRaw = (await miscStore().get("houseAds", { type: "json" })) || [
-      { id: "house-pricing", title: "Go Ultra — every analytic, every event", image: null, link: "/pricing", house: true, kind: "gatherly", enabled: true },
+      { id: "house-pricing", title: "Go Ultra, every analytic, every event", image: null, link: "/pricing", house: true, kind: "gatherly", enabled: true },
       { id: "house-advertise", title: "Advertise your community on Gatherly", image: null, link: "/advertisers", house: true, kind: "gatherly", enabled: true },
     ];
+    const house = houseRaw.filter((h) => h.enabled !== false).map((h) => ({ id: h.id, title: h.title, image: h.image, link: h.link }));
     return json({ config, ads: running, house });
   }
 
@@ -119,17 +120,17 @@ async function handler(req) {
       createdAt: new Date().toISOString(),
     };
     await store.setJSON(adId, ad);
-    await audit(user, "ad.submit", { adId, days: pack.days, flagged: scan.flagged });
+    await audit(user, "ad.submit", { adId, title, days: pack.days, flagged: scan.flagged });
 
     const sk = process.env.STRIPE_SECRET_KEY;
     if (!sk) {
-      return json({ ok: true, adId, queued: true, note: "Submitted for review. Card payments aren't configured yet — an admin can confirm payment manually." });
+      return json({ ok: true, adId, queued: true, note: "Submitted for review. Card payments aren't configured yet, an admin can confirm payment manually." });
     }
     const site = SITE(url);
     const { ok, d } = await stripeCheckout({
       mode: "payment",
       "line_items[0][price_data][currency]": (process.env.STRIPE_CURRENCY || "usd").toLowerCase(),
-      "line_items[0][price_data][product_data][name]": `Gatherly Advertising — ${pack.label}`,
+      "line_items[0][price_data][product_data][name]": `Gatherly Advertising - ${pack.label}`,
       "line_items[0][price_data][unit_amount]": String(pack.amount),
       "line_items[0][quantity]": "1",
       success_url: `${site}/advertisers?paid=${adId}`,
@@ -176,7 +177,7 @@ async function handler(req) {
     ad.endAt = new Date(Date.now() + ad.days * 86400000).toISOString();
     ad.approvedBy = user.username; ad.approvedAt = new Date().toISOString();
     await store.setJSON(ad.id, ad);
-    await audit(user, "ad.approve", { adId: ad.id });
+    await audit(user, "ad.approve", { adId: ad.id, title: ad.title, advertiser: ad.username });
     await postStaffEvent(brandEmbed({
       title: "Advertisement approved",
       description: `**${ad.title}** by ${ad.username} is now live for ${ad.days} days.`,
@@ -193,7 +194,7 @@ async function handler(req) {
     ad.status = "denied"; ad.denyReason = clampStr(b.reason, 300) || "Breached advertising standards.";
     ad.deniedBy = user.username; ad.deniedAt = new Date().toISOString();
     await store.setJSON(ad.id, ad);
-    await audit(user, "ad.deny", { adId: ad.id, reason: ad.denyReason });
+    await audit(user, "ad.deny", { adId: ad.id, title: ad.title, advertiser: ad.username, reason: ad.denyReason });
     await postStaffEvent(brandEmbed({
       title: "Advertisement denied",
       description: `**${ad.title}** by ${ad.username} was denied.\nReason: ${ad.denyReason}`,
