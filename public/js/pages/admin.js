@@ -23,6 +23,9 @@ async function init() {
 
   if (me.role === "executive") {
     document.querySelectorAll(".exec-only").forEach((el) => el.style.removeProperty("display"));
+  } else {
+    const execBox = $("execClaimBox");
+    if (execBox) execBox.style.display = "block";
   }
 
   document.querySelectorAll(".cr-tab").forEach((btn) => {
@@ -378,19 +381,48 @@ function openTicket(id, t) {
       <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">${m.from === "staff" ? "Staff" : esc(t.username)} - ${new Date(m.at).toLocaleString()}</div>
       <div>${esc(m.text)}</div>
     </div>`).join("");
+  const claimLabel = t.assignedTo
+    ? `Claimed by ${esc(t.assignedToName || "staff")}${me && t.assignedTo === me.id ? " (you)" : ""}`
+    : "Unclaimed";
   host.innerHTML = `
     <div class="card" style="margin-top:16px">
       <h3 style="margin-bottom:4px">${esc(t.subject)}</h3>
-      <div style="font-size:.82rem;color:var(--muted);margin-bottom:14px">${esc(t.username)} - ${esc(t.topic)} - Ticket <code>${esc(t.id)}</code></div>
+      <div style="font-size:.82rem;color:var(--muted);margin-bottom:6px">${esc(t.username)} - ${esc(t.topic)} - Ticket <code>${esc(t.id)}</code></div>
+      <div style="font-size:.8rem;color:${t.assignedTo ? "var(--good,#69d99c)" : "var(--live,#ffb454)"};margin-bottom:14px">${esc(claimLabel)}</div>
       <div style="max-height:340px;overflow-y:auto;margin-bottom:14px">${msgs || "<p style='color:var(--muted)'>No messages.</p>"}</div>
       <textarea id="staffReply" class="input" rows="3" placeholder="Type your reply..." style="width:100%;margin-bottom:10px"></textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="sendStaffReply('${esc(id)}')">Send reply</button>
-        <button class="btn btn-ghost btn-sm" onclick="closeTicket('${esc(id)}')">Close ticket</button>
+        ${t.assignedTo
+          ? `<button class="btn btn-ghost btn-sm" onclick="unclaimTicket('${esc(id)}')">Unclaim</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="claimTicket('${esc(id)}')">Claim</button>`}
+        <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" onclick="closeTicket('${esc(id)}')">Close ticket</button>
       </div>
       <div id="ticketMsg" style="margin-top:10px"></div>
     </div>`;
 }
+
+async function refreshOpenTicket(id) {
+  try {
+    const { ticket } = await api(`/api/tickets?action=get&id=${encodeURIComponent(id)}`);
+    openTicket(id, ticket);
+  } catch {}
+  loadTickets();
+}
+
+window.claimTicket = async (id) => {
+  try {
+    await api(`/api/tickets?action=assign&id=${encodeURIComponent(id)}`, { method: "POST" });
+    await refreshOpenTicket(id);
+  } catch (e) { alert(e.message); }
+};
+
+window.unclaimTicket = async (id) => {
+  try {
+    await api(`/api/tickets?action=unassign&id=${encodeURIComponent(id)}`, { method: "POST" });
+    await refreshOpenTicket(id);
+  } catch (e) { alert(e.message); }
+};
 
 window.sendStaffReply = async (id) => {
   const text = $("staffReply")?.value?.trim();
@@ -709,6 +741,17 @@ window.addNotification = async () => {
 };
 
 /* ========================== EXECUTIVE ========================== */
+window.claimExec = async () => {
+  const code = $("execClaimCode")?.value?.trim();
+  const msg = $("execClaimMsg");
+  if (!code) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter the executive setup code.</div>`; return; }
+  try {
+    await api("/api/admin?action=claim-exec", { method: "POST", body: { code } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Executive access unlocked. Reloading...</div>`;
+    setTimeout(() => location.reload(), 900);
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
 async function loadExec() {
   if (me.role !== "executive") return;
   try {
@@ -743,7 +786,7 @@ window.genCode = async () => {
   const msg = $("execMsg");
   try {
     const d = await api("/api/admin?action=gen-code", { method: "POST", body: {} });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Admin code (copy now — shown once, expires ${new Date(d.expiresAt).toLocaleTimeString()}):<br><code style="font-size:1rem;user-select:all">${esc(d.code)}</code></div>`;
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Admin code (copy now, shown once, expires ${new Date(d.expiresAt).toLocaleTimeString()}):<br><code style="font-size:1rem;user-select:all">${esc(d.code)}</code></div>`;
     loadExec();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
@@ -754,85 +797,4 @@ window.revokeCode = async (key) => {
   try {
     await api("/api/admin?action=revoke-code", { method: "POST", body: { key } });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Code revoked.</div>`;
-    loadExec();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
-
-window.saveContent = async () => {
-  const heroHeadline = $("heroHeadline")?.value?.trim();
-  const heroSub = $("heroSub")?.value?.trim();
-  const msg = $("execMsg");
-  try {
-    await api("/api/admin?action=set-content", { method: "POST", body: { heroHeadline, heroSub } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Homepage content updated.</div>`;
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
-
-/* ========================== AUDIT LOG ========================== */
-async function loadAudit() {
-  const host = $("auditList");
-  if (!host) return;
-  host.innerHTML = `<p style="color:var(--muted)">Loading...</p>`;
-  try {
-    const d = await api("/api/admin?action=audit");
-    const entries = d.entries || [];
-    if (!entries.length) { host.innerHTML = `<p style="color:var(--muted)">No audit entries.</p>`; return; }
-    host.innerHTML = entries.map((e) => `
-      <div class="card" style="margin-bottom:6px;font-size:.82rem;border-left:3px solid ${e.level === "warn" ? "var(--yellow,#ffcf5c)" : e.level === "error" ? "var(--red,#ff7a7a)" : "var(--border)"}">
-        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <strong>${esc(e.action)}</strong>
-          <span style="color:var(--muted)">${new Date(e.at).toLocaleString()}</span>
-        </div>
-        <div style="color:var(--muted);margin-top:2px">${esc(e.actor?.username || "system")} ${e.detail?.targetId ? "- target: " + esc(e.detail.targetId) : ""}</div>
-        ${e.detail?.diagnosis ? `<div style="margin-top:4px;color:var(--yellow,#ffcf5c)">${esc(e.detail.diagnosis)}</div>` : ""}
-        ${e.detail?.fix ? `<div style="color:var(--muted)">${esc(e.detail.fix)}</div>` : ""}
-      </div>`).join("");
-  } catch (e) { host.innerHTML = `<p style="color:var(--red,#ff7a7a)">${esc(e.message)}</p>`; }
-}
-
-/* ========================== USER SEARCH ========================== */
-const searchInput = $("userSearch");
-if (searchInput) {
-  let debounce;
-  searchInput.addEventListener("input", () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => loadUsers(searchInput.value), 300);
-  });
-}
-
-/* ========================== RICH TEXT EDITOR ========================== */
-function initRichText() {
-  const toolbar = $("rtToolbar");
-  const editor = $("newsBody");
-  if (!toolbar || !editor) return;
-  const exec = (cmd, val = null) => { editor.focus(); document.execCommand(cmd, false, val); };
-
-  toolbar.querySelectorAll(".rt-btn").forEach((btn) => {
-    btn.addEventListener("mousedown", (e) => e.preventDefault());
-    btn.addEventListener("click", () => {
-      if (btn.dataset.cmd) exec(btn.dataset.cmd);
-      else if (btn.dataset.align) exec("justify" + btn.dataset.align.charAt(0).toUpperCase() + btn.dataset.align.slice(1));
-    });
-  });
-
-  const rtLink = $("rtLink");
-  if (rtLink) rtLink.addEventListener("click", () => {
-    const url = prompt("Link URL (https://...):");
-    if (url) exec("createLink", url);
-  });
-
-  const rtImage = $("rtImage");
-  if (rtImage) rtImage.addEventListener("click", () => {
-    const url = prompt("Image URL (https://...):");
-    if (url) exec("insertImage", url);
-  });
-
-  const rtBlock = $("rtBlock");
-  if (rtBlock) rtBlock.addEventListener("change", () => { exec("formatBlock", rtBlock.value); rtBlock.selectedIndex = 0; });
-
-  const rtSize = $("rtSize");
-  if (rtSize) rtSize.addEventListener("change", () => { if (rtSize.value) exec("fontSize", rtSize.value); rtSize.selectedIndex = 0; });
-}
-initRichText();
-
-init();
+    loadEx
