@@ -109,6 +109,12 @@ async function handler(req) {
     });
   }
 
+  if (action === "pending-count") {
+    const tickets = (await listTickets()).filter((t) => t.status !== "closed");
+    const flags = (await listFlags()).filter((f) => !f.resolved);
+    return json({ pending: tickets.length + flags.length });
+  }
+
   if (action === "resolve-flag" && req.method === "POST") {
     const b = await req.json().catch(() => ({}));
     const rec = await auditStore().get(b.key, { type: "json" });
@@ -187,7 +193,7 @@ async function handler(req) {
     else if (action === "credits-remove") credits = Math.max(0, credits - amount);
     else credits = amount;
     await uStore.setJSON(b.userId, { ...target, credits, updatedAt: new Date().toISOString() });
-    await audit(user, action, { targetId: b.userId, amount, newTotal: credits });
+    await audit(user, action, { targetId: b.userId, targetUsername: target.username, amount, newTotal: credits });
     return json({ ok: true, credits });
   }
 
@@ -203,7 +209,7 @@ async function handler(req) {
       planSetAt: new Date().toISOString(), credits: plan === "free" ? (target.credits ?? 0) : grant,
       creditsPeriod: monthKey(), updatedAt: new Date().toISOString(),
     });
-    await audit(user, "user.set-plan", { targetId: b.userId, plan, creditsGranted: plan === "free" ? 0 : grant });
+    await audit(user, "user.set-plan", { targetId: b.userId, targetUsername: target.username, plan, creditsGranted: plan === "free" ? 0 : grant });
     return json({ ok: true, plan });
   }
 
@@ -218,7 +224,7 @@ async function handler(req) {
       override = n;
     }
     await uStore.setJSON(b.userId, { ...target, listingCapOverride: override, updatedAt: new Date().toISOString() });
-    await audit(user, "user.set-listing-cap", { targetId: b.userId, cap: override });
+    await audit(user, "user.set-listing-cap", { targetId: b.userId, targetUsername: target.username, cap: override });
     return json({ ok: true, cap: override, effectiveCap: effectiveListingCap({ ...target, listingCapOverride: override }) });
   }
 
@@ -229,7 +235,7 @@ async function handler(req) {
     if (!target) return json({ error: "User not found." }, 404);
     if (![null, "admin", "executive"].includes(b.role)) return json({ error: "Invalid role." }, 400);
     await uStore.setJSON(b.userId, { ...target, role: b.role || null, updatedAt: new Date().toISOString() });
-    await audit(user, "user.set-role", { targetId: b.userId, role: b.role });
+    await audit(user, "user.set-role", { targetId: b.userId, targetUsername: target.username, role: b.role });
     return json({ ok: true });
   }
 
@@ -246,7 +252,7 @@ async function handler(req) {
       if (blocked) return blocked;
     }
     await uStore.setJSON(b.userId, { ...target, suspended: Boolean(b.suspended), suspendReason: clampStr(b.reason, 200) || null, updatedAt: new Date().toISOString() });
-    await audit(user, b.suspended ? "user.suspend" : "user.unsuspend", { targetId: b.userId, reason: b.reason });
+    await audit(user, b.suspended ? "user.suspend" : "user.unsuspend", { targetId: b.userId, targetUsername: target.username, reason: b.reason });
     return json({ ok: true, suspended: Boolean(b.suspended) });
   }
 
@@ -263,7 +269,7 @@ async function handler(req) {
     const reason = clampStr(b.reason, 200) || "No reason provided.";
     await uStore.setJSON(b.userId, { ...target, supportBlacklist: { active: true, reason, by: user.username, at: new Date().toISOString() }, updatedAt: new Date().toISOString() });
     const roled = target.discordId ? await addGuildRole(target.discordId) : false;
-    await audit(user, "support.blacklist-add", { targetId: b.userId, reason, discordRoleApplied: roled });
+    await audit(user, "support.blacklist-add", { targetId: b.userId, targetUsername: target.username, reason, discordRoleApplied: roled });
     return json({ ok: true, discordRoleApplied: roled });
   }
 
@@ -274,17 +280,18 @@ async function handler(req) {
     const { supportBlacklist: _drop, ...rest } = target;
     await uStore.setJSON(b.userId, { ...rest, updatedAt: new Date().toISOString() });
     const unroled = target.discordId ? await removeGuildRole(target.discordId) : false;
-    await audit(user, "support.blacklist-remove", { targetId: b.userId, discordRoleRemoved: unroled });
+    await audit(user, "support.blacklist-remove", { targetId: b.userId, targetUsername: target.username, discordRoleRemoved: unroled });
     return json({ ok: true, discordRoleRemoved: unroled });
   }
 
   if (action === "wipe-listings" && req.method === "POST") {
     const b = await req.json().catch(() => ({}));
+    const target = await uStore.get(b.userId, { type: "json" });
     const { blobs } = await evStore.list();
     const all = await Promise.all(blobs.map((x) => evStore.get(x.key, { type: "json" })));
     let removed = 0;
     for (const e of all) if (e && e.userId === b.userId) { await evStore.delete(e.id); removed++; }
-    await audit(user, "user.wipe-listings", { targetId: b.userId, removed });
+    await audit(user, "user.wipe-listings", { targetId: b.userId, targetUsername: target?.username, removed });
     return json({ ok: true, removed });
   }
 
@@ -414,7 +421,7 @@ async function handler(req) {
     };
     if (existing) Object.assign(existing, rec); else list.push(rec);
     await miscStore().setJSON("houseAds", list);
-    await audit(user, existing ? "ads.house-update" : "ads.house-create", { id: rec.id, kind });
+    await audit(user, existing ? "ads.house-update" : "ads.house-create", { id: rec.id, title: rec.title, kind });
     return json({ ok: true, houseAds: list });
   }
 
@@ -422,9 +429,10 @@ async function handler(req) {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
     const b = await req.json().catch(() => ({}));
     let list = (await miscStore().get("houseAds", { type: "json" })) || [];
+    const removed = list.find((a) => a.id === b.id);
     list = list.filter((a) => a.id !== b.id);
     await miscStore().setJSON("houseAds", list);
-    await audit(user, "ads.house-delete", { id: b.id });
+    await audit(user, "ads.house-delete", { id: b.id, title: removed?.title });
     return json({ ok: true, houseAds: list });
   }
 
@@ -488,7 +496,7 @@ async function handler(req) {
     const { blobs } = await auditStore().list();
     let entries = (await Promise.all(blobs.map((b) => auditStore().get(b.key, { type: "json" })))).filter(Boolean);
     if (action === "flagged") entries = entries.filter((e) => e.level === "warn" || e.detail?.watchdog);
-    return json({ entries: entries.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 200) });
+    return json({ entries: entries.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 500) });
   }
 
   return json({ error: "Unknown action." }, 404);
