@@ -136,26 +136,57 @@ export async function guard(req, actor, bucket, limit, windowSec, opts = {}) {
   return json({ error: `You are doing this too fast, please wait ${st.retryAfter}s and try again.`, retryAfter: st.retryAfter }, 429);
 }
 
+// Ask the AI for a short "here is what happened / how to resolve" note for staff.
+// Degrades to a sensible static fallback when no API key is set or the call fails.
+async function watchdogResolution(kind, detail, actor) {
+  const fallback = "Review the activity below in the Control Room. If it looks like abuse, suspend the account from the Users tab. If it looks accidental, no action is needed.";
+  const prompt = `You are Gatherly's security analyst. A safety watchdog just flagged activity on our ER:LC events platform. In 2 to 3 short sentences, written for a staff member, explain plainly: what the user appears to have done, why it was flagged, and the recommended action to resolve it (for example: ignore, warn, rate-limit, suspend, or blacklist). Be calm and concrete. No greeting, no markdown headings, no em dashes.\n\nFlag type: ${kind}\nWhat happened: ${detail.what || "An action endpoint limit was tripped."}\nRisk: ${detail.risk || "Repeated requests to an action endpoint."}\nUser: ${actor ? `${actor.username || "unknown"} (id ${actor.id || "?"}, role ${actor.role || "user"})` : "anonymous"}`;
+  return (await aiText(prompt, { max_tokens: 200 }).catch(() => null)) || fallback;
+}
+
 export async function flagWatchdog(actor, req, kind, detail = {}) {
-  await audit(actor, `watchdog.${kind}`, { ...detail, watchdog: true });
-  const url = process.env.WATCHDOG_WEBHOOK_URL;
-  if (!url) return;
   let path = "unknown", ip = "unknown";
   try { if (req) { const u = new URL(req.url); path = u.pathname + u.search; ip = clientIp(req); } } catch {}
+
+  // AI-written guidance for staff, stored on the audit record so the Audit log
+  // and the Checklist can both show "what they did / how to resolve".
+  const aiResolution = await watchdogResolution(kind, detail, actor);
+
+  await audit(actor, `watchdog.${kind}`, {
+    ...detail, watchdog: true,
+    ip, path,
+    diagnosis: detail.what || "Flagged activity.",
+    fix: aiResolution,
+    aiResolution,
+  });
+
+  const url = process.env.WATCHDOG_WEBHOOK_URL;
+  if (!url) return;
+
+  const created = actor?.discordId ? `<@${actor.discordId}>` : null;
   await postDiscordWebhook(url, {
     username: "Gatherly Watchdog",
+    avatar_url: BRAND.logo,
     embeds: [{
-      title: `Flagged activity: ${kind}`,
-      description: detail.risk || "Suspicious activity detected.",
-      color: 0xff5c5c,
+      title: "Watchdog Security Flag",
+      color: BRAND.red,
+      thumbnail: { url: BRAND.logo },
+      description: [
+        `# ${kind.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}`,
+        `> ${String(detail.risk || "Suspicious activity detected.").slice(0, 400)}`,
+        "",
+        "### AI assessment and resolution",
+        `> ${aiResolution.replace(/\n+/g, "\n> ").slice(0, 900)}`,
+      ].join("\n"),
       fields: [
-        { name: "User", value: actor ? `${actor.username || "unknown"} (\`${actor.id || "?"}\`)` : `Anonymous (\`${ip}\`)`, inline: false },
-        { name: "What happened", value: String(detail.what || "An action endpoint limit was tripped.").slice(0, 900), inline: false },
-        { name: "Endpoint", value: `\`${path}\``, inline: true },
-        { name: "IP", value: `\`${ip}\``, inline: true },
+        { name: "User", value: actor ? `**${actor.username || "unknown"}**\n\`${actor.id || "?"}\`${created ? `\n${created}` : ""}` : `Anonymous\n\`${ip}\``, inline: true },
+        { name: "What they did", value: String(detail.what || "An action endpoint limit was tripped.").slice(0, 300), inline: true },
+        { name: "Endpoint", value: `\`${path}\``, inline: false },
+        { name: "IP address", value: `\`${ip}\``, inline: true },
+        { name: "Detected", value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
       ],
       timestamp: new Date().toISOString(),
-      footer: { text: "Gatherly Watchdog - automated safety flag" },
+      footer: { text: "Gatherly Watchdog - automated safety flag", icon_url: BRAND.logo },
     }],
   });
 }
@@ -206,17 +237,10 @@ function codeBlocks(prefix, blocks, len) {
   const block = () => Array.from({ length: len }, () => CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)]).join("");
   return `${prefix}-` + Array.from({ length: blocks }, block).join("-");
 }
-// Admin access code: 5 blocks of 6 -> ~30 random chars. Long, single-use,
-// and only ever stored hashed. There is intentionally NO executive code
-// generator: executive is claimed once via EXEC_SETUP_CODE and assigned by
-// an existing executive. Admins answer/resolve tickets and run small functions only.
 export const adminCode = () => codeBlocks("GATH", 5, 6);
-// Retained for backward compatibility only; no longer generated anywhere.
 export const execCode = () => codeBlocks("GEXE", 6, 6);
 
-// Access codes are never stored in plaintext. We persist an HMAC of the code so a
-// leaked blob store cannot reveal a working code. Generated codes also expire.
-export const CODE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+export const CODE_TTL_MS = 30 * 60 * 1000;
 export function hashCode(code) {
   return crypto.createHmac("sha256", secret()).update(`code:${String(code).trim().toUpperCase()}`).digest("base64url");
 }
@@ -360,7 +384,6 @@ export const PLAN_INFO = {
   pro:   { id: "pro",   name: "Gatherly Pro",   level: 1, monthlyCredits: PRO_MONTHLY_CREDITS,  eventCap: EVENT_CAP_PRO   },
   ultra: { id: "ultra", name: "Gatherly Ultra", level: 2, monthlyCredits: ULTRA_MONTHLY_CREDITS, eventCap: EVENT_CAP_ULTRA },
 };
-// Backward-compat alias so any not-yet-updated code reading weeklyCredits still works.
 for (const k of Object.keys(PLAN_INFO)) PLAN_INFO[k].weeklyCredits = PLAN_INFO[k].monthlyCredits;
 
 export function normalizePlan(plan) {
@@ -372,6 +395,12 @@ export function normalizePlan(plan) {
 export const planLevel = (plan) => PLAN_INFO[normalizePlan(plan)].level;
 export const planName = (plan) => PLAN_INFO[normalizePlan(plan)].name;
 export const planCap = (plan) => PLAN_INFO[normalizePlan(plan)].eventCap;
+
+export function effectiveListingCap(user) {
+  const base = planCap(effectivePlan(user));
+  const o = Number(user?.listingCapOverride);
+  return Number.isFinite(o) && o >= 0 ? Math.floor(o) : base;
+}
 
 export const monthKey = (d = new Date()) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 
@@ -402,7 +431,7 @@ export const canCreateEvent = (user, usedThisMonth) => usedThisMonth < planCap(e
 export const isSupportBlacklisted = (u) => Boolean(u && u.supportBlacklist && u.supportBlacklist.active);
 
 /* =========================================================================
-   ADVERTISING — pricing, safety scanning, rotation config
+   ADVERTISING
    ========================================================================= */
 export const AD_PACKS = {
   3:  { days: 3,  amount: 500,  label: "3-day placement"  },
@@ -448,7 +477,7 @@ export async function aiModerateAd(ad = {}) {
 }
 
 /* =========================================================================
-   STAFF EVENT WEBHOOK (Update 6)
+   STAFF EVENT WEBHOOK
    ========================================================================= */
 export function brandEmbed({ title, description, color = BRAND.color, fields = [], url, thumbnail, footer = "Gatherly Automation" } = {}) {
   const e = { title, description, color, timestamp: new Date().toISOString(), footer: { text: footer, icon_url: BRAND.logo } };
