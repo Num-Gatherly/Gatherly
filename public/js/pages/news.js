@@ -38,6 +38,7 @@ function renderArticle(a) {
   const ntitle = document.getElementById("newsTitle"); if (ntitle) ntitle.textContent = a.title;
   const nintro = document.getElementById("newsIntro"); if (nintro) nintro.textContent = `By ${a.authorName || "Gatherly"} · ${fmtDate(a.publishedAt || a.createdAt)}`;
   const blocks = (a.blocks || []).map((b) => {
+    if (b.type === "html") return `<div class="article-block-html">${b.value}</div>`;
     if (b.type === "image") return `<img class="article-block-img" src="${esc(b.value)}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'">`;
     if (b.type === "heading") return `<h3>${esc(b.value)}</h3>`;
     return `<p>${esc(b.value).replace(/\n/g, "<br>")}</p>`;
