@@ -5,7 +5,7 @@
 // the opener's DM replies come back through /api/interactions.
 import {
   json, ticketsStore, requireUser, id, auditError, guard, clampStr,
-  isStaff, isGuildMember, isSupportBlacklisted, effectivePlan,
+  isStaff, isGuildMember, isSupportBlacklisted, effectivePlan, audit,
 } from "../lib/util.js";
 import {
   getTicket, saveTicket, allTickets, sortForFeed, SAFE, appendMessage,
@@ -57,6 +57,7 @@ async function handler(req) {
     const card = await sendChannelCard(t);
     if (card.ok) { t.channelMessageId = card.messageId; t.channelId = card.channelId; }
     await saveTicket(t);
+    await audit(user, "ticket.create", { ticketId: t.id, subject: t.subject, topic: t.topic });
     const dm = await dmOpened(t);
     return json({ ok: true, ticket: SAFE(t), delivered: card.ok, dmDelivered: dm.ok });
   }
@@ -89,6 +90,7 @@ async function handler(req) {
     appendMessage(t, staff ? "staff" : "user", text);
     await saveTicket(t);
     if (staff) {
+      await audit(user, "ticket.staff-reply", { ticketId: t.id, subject: t.subject, ticketUser: t.username });
       await dmStaffReply(t, text);                 // no staff name, no URL
       await postChannelNote(t, `> Staff reply sent to the user.`);
     } else {
@@ -105,6 +107,7 @@ async function handler(req) {
     if (t.userId !== user.id && !isStaff(user)) return json({ error: "Not found." }, 404);
     t.escalated = true; t.escalatedAt = new Date().toISOString(); t.updatedAt = t.escalatedAt;
     await saveTicket(t);
+    await audit(user, "ticket.escalate", { ticketId: t.id, subject: t.subject, ticketUser: t.username, by: isStaff(user) ? "staff" : "user" });
     await postChannelNote(t, "> This ticket was marked **high urgency**.");
     await refreshChannelCard(t);
     return json({ ok: true, ticket: SAFE(t) });
@@ -118,6 +121,7 @@ async function handler(req) {
     if (!t) return json({ error: "Not found." }, 404);
     t.assignedTo = user.id; t.assignedToName = user.username; t.updatedAt = new Date().toISOString();
     await saveTicket(t);
+    await audit(user, "ticket.claim", { ticketId: t.id, subject: t.subject, ticketUser: t.username });
     await refreshChannelCard(t);
     return json({ ok: true, ticket: SAFE(t) });
   }
@@ -129,6 +133,7 @@ async function handler(req) {
     if (!t) return json({ error: "Not found." }, 404);
     t.assignedTo = null; t.assignedToName = null; t.updatedAt = new Date().toISOString();
     await saveTicket(t);
+    await audit(user, "ticket.unclaim", { ticketId: t.id, subject: t.subject, ticketUser: t.username });
     await refreshChannelCard(t);
     return json({ ok: true, ticket: SAFE(t) });
   }
@@ -142,6 +147,7 @@ async function handler(req) {
     if (action === "reopen") t.escalated = false;
     t.updatedAt = new Date().toISOString();
     await saveTicket(t);
+    await audit(user, action === "close" ? "ticket.close" : "ticket.reopen", { ticketId: t.id, subject: t.subject, ticketUser: t.username });
     await refreshChannelCard(t);
     if (action === "close") await dmResolved(t);
     return json({ ok: true, ticket: SAFE(t) });
