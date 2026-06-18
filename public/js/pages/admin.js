@@ -797,4 +797,6 @@ window.revokeCode = async (key) => {
   try {
     await api("/api/admin?action=revoke-code", { method: "POST", body: { key } });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Code revoked.</div>`;
-    loadEx
+    loadExec();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
