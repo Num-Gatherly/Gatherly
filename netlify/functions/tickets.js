@@ -78,7 +78,7 @@ async function handler(req) {
     if (blocked) return blocked;
     const b = await req.json().catch(() => ({}));
     const ticketId = b.id || url.searchParams.get("id");
-    const text = clampStr(b.message, 2000);
+    const text = clampStr(b.text ?? b.message, 2000);
     if (!text) return json({ error: "Message is required." }, 400);
     const t = await getTicket(ticketId);
     if (!t) return json({ error: "Ticket not found." }, 404);
@@ -114,7 +114,7 @@ async function handler(req) {
   if (action === "assign" && req.method === "POST") {
     if (!isStaff(user)) return json({ error: "Staff only." }, 403);
     const b = await req.json().catch(() => ({}));
-    const t = await getTicket(b.id);
+    const t = await getTicket(b.id || url.searchParams.get("id"));
     if (!t) return json({ error: "Not found." }, 404);
     t.assignedTo = user.id; t.assignedToName = user.username; t.updatedAt = new Date().toISOString();
     await saveTicket(t);
@@ -125,7 +125,7 @@ async function handler(req) {
   if (action === "unassign" && req.method === "POST") {
     if (!isStaff(user)) return json({ error: "Staff only." }, 403);
     const b = await req.json().catch(() => ({}));
-    const t = await getTicket(b.id);
+    const t = await getTicket(b.id || url.searchParams.get("id"));
     if (!t) return json({ error: "Not found." }, 404);
     t.assignedTo = null; t.assignedToName = null; t.updatedAt = new Date().toISOString();
     await saveTicket(t);
@@ -136,7 +136,7 @@ async function handler(req) {
   if ((action === "close" || action === "reopen") && req.method === "POST") {
     if (!isStaff(user)) return json({ error: "Staff only." }, 403);
     const b = await req.json().catch(() => ({}));
-    const t = await getTicket(b.id);
+    const t = await getTicket(b.id || url.searchParams.get("id"));
     if (!t) return json({ error: "Ticket not found." }, 404);
     t.status = action === "close" ? "closed" : "open";
     if (action === "reopen") t.escalated = false;
