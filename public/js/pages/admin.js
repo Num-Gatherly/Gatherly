@@ -22,7 +22,7 @@ async function init() {
   if (roleEl) roleEl.textContent = `Signed in as ${me.globalName || me.username} - ${me.role === "executive" ? "Executive" : "Admin"}`;
 
   if (me.role === "executive") {
-    document.querySelectorAll(".exec-only").forEach((el) => el.style.removeProperty("display"));
+    document.querySelectorAll(".exec-only").forEach((el) => el.classList.remove("exec-only"));
   } else {
     const execBox = $("execClaimBox");
     if (execBox) execBox.style.display = "block";
