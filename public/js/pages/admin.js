@@ -800,3 +800,148 @@ window.revokeCode = async (key) => {
     loadExec();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
+
+window.saveContent = async () => {
+  const heroHeadline = $("heroHeadline")?.value?.trim();
+  const heroSub = $("heroSub")?.value?.trim();
+  const msg = $("execMsg");
+  try {
+    await api("/api/admin?action=set-content", { method: "POST", body: { heroHeadline, heroSub } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Homepage content updated.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+};
+
+/* ========================== AUDIT LOG ========================== */
+const ACTION_LABELS = {
+  "ticket.create": "Opened a support ticket",
+  "ticket.staff-reply": "Replied to a ticket",
+  "ticket.claim": "Claimed a ticket",
+  "ticket.unclaim": "Unclaimed a ticket",
+  "ticket.close": "Closed a ticket",
+  "ticket.reopen": "Reopened a ticket",
+  "ticket.escalate": "Escalated a ticket",
+  "ad.submit": "Submitted an advertisement",
+  "ad.approve": "Approved an advertisement",
+  "ad.deny": "Denied an advertisement",
+  "ad.config": "Updated ad rotation settings",
+  "ads.house-create": "Created a house ad",
+  "ads.house-update": "Updated a house ad",
+  "ads.house-delete": "Deleted a house ad",
+  "news.create": "Created a news article",
+  "news.update": "Updated a news article",
+  "news.delete": "Deleted a news article",
+  "announce.add": "Added an announcement",
+  "announce.remove": "Removed an announcement",
+  "notify.add": "Sent a notification",
+  "notify.remove": "Removed a notification",
+  "user.set-plan": "Changed a user's plan",
+  "user.set-role": "Changed a user's staff role",
+  "user.set-listing-cap": "Changed a user's listing cap",
+  "user.suspend": "Suspended a user",
+  "user.unsuspend": "Unsuspended a user",
+  "user.delete-account": "Deleted a user account",
+  "user.wipe-listings": "Wiped a user's listings",
+  "support.blacklist-add": "Blacklisted a user from support",
+  "support.blacklist-remove": "Removed a support blacklist",
+  "credits-add": "Added credits",
+  "credits-remove": "Removed credits",
+  "credits-set": "Set credits",
+  "code.generate": "Generated an admin code",
+  "code.revoke": "Revoked an admin code",
+  "code.redeem-success": "Redeemed an access code",
+  "code.redeem-failed": "Failed access code redemption",
+  "exec.claim-success": "Unlocked executive access",
+  "exec.claim-failed": "Failed executive access attempt",
+  "site.content-update": "Updated homepage content",
+  "event.boost": "Boosted an event",
+  "event.unboost": "Unboosted an event",
+  "event.end": "Ended an event early",
+  "event.delete": "Deleted an event",
+  "watchdog.resolve": "Resolved a security flag",
+  "watchdog.escalate": "Escalated a security flag",
+};
+const describeAction = (action) => ACTION_LABELS[action] || action;
+
+const DETAIL_PRIORITY = ["targetUsername", "ticketUser", "subject", "title", "advertiser", "reason", "plan", "role", "cap", "amount", "newTotal"];
+const DETAIL_HIDE = new Set(["watchdog", "diagnosis", "fix", "aiResolution", "ip", "path", "targetId", "ticketId", "adId", "eventId", "id", "key"]);
+function detailLine(detail = {}) {
+  const parts = [];
+  DETAIL_PRIORITY.forEach((k) => {
+    if (detail[k] !== undefined && detail[k] !== null && detail[k] !== "") parts.push(`${k === "targetUsername" || k === "ticketUser" ? "user" : k}: ${detail[k]}`);
+  });
+  Object.entries(detail).forEach(([k, v]) => {
+    if (DETAIL_HIDE.has(k) || DETAIL_PRIORITY.includes(k)) return;
+    if (v === null || v === undefined || v === "" || typeof v === "object") return;
+    parts.push(`${k}: ${v}`);
+  });
+  return parts.join(" - ");
+}
+
+async function loadAudit() {
+  const host = $("auditList");
+  if (!host) return;
+  host.innerHTML = `<p style="color:var(--muted)">Loading...</p>`;
+  try {
+    const d = await api("/api/admin?action=audit");
+    const entries = d.entries || [];
+    if (!entries.length) { host.innerHTML = `<p style="color:var(--muted)">No audit entries.</p>`; return; }
+    host.innerHTML = entries.map((e) => `
+      <div class="card" style="margin-bottom:6px;font-size:.82rem;border-left:3px solid ${e.level === "warn" ? "var(--yellow,#ffcf5c)" : e.level === "error" ? "var(--red,#ff7a7a)" : "var(--border)"}">
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <strong>${esc(describeAction(e.action))}</strong>
+          <span style="color:var(--muted)">${new Date(e.at).toLocaleString()}</span>
+        </div>
+        <div style="color:var(--muted);margin-top:2px">${esc(e.actor?.username || "system")}${e.actor?.role ? ` (${esc(e.actor.role)})` : ""}</div>
+        ${detailLine(e.detail) ? `<div style="margin-top:4px">${esc(detailLine(e.detail))}</div>` : ""}
+        ${e.detail?.diagnosis ? `<div style="margin-top:4px;color:var(--yellow,#ffcf5c)">${esc(e.detail.diagnosis)}</div>` : ""}
+        ${e.detail?.fix ? `<div style="color:var(--muted)">${esc(e.detail.fix)}</div>` : ""}
+      </div>`).join("");
+  } catch (e) { host.innerHTML = `<p style="color:var(--red,#ff7a7a)">${esc(e.message)}</p>`; }
+}
+
+/* ========================== USER SEARCH ========================== */
+const searchInput = $("userSearch");
+if (searchInput) {
+  let debounce;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => loadUsers(searchInput.value), 300);
+  });
+}
+
+/* ========================== RICH TEXT EDITOR ========================== */
+function initRichText() {
+  const toolbar = $("rtToolbar");
+  const editor = $("newsBody");
+  if (!toolbar || !editor) return;
+  const exec = (cmd, val = null) => { editor.focus(); document.execCommand(cmd, false, val); };
+
+  toolbar.querySelectorAll(".rt-btn").forEach((btn) => {
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", () => {
+      if (btn.dataset.cmd) exec(btn.dataset.cmd);
+      else if (btn.dataset.align) exec("justify" + btn.dataset.align.charAt(0).toUpperCase() + btn.dataset.align.slice(1));
+    });
+  });
+
+  const rtLink = $("rtLink");
+  if (rtLink) rtLink.addEventListener("click", () => {
+    const url = prompt("Link URL (https://...):");
+    if (url) exec("createLink", url);
+  });
+
+  const rtImage = $("rtImage");
+  if (rtImage) rtImage.addEventListener("click", () => {
+    const url = prompt("Image URL (https://...):");
+    if (url) exec("insertImage", url);
+  });
+
+  const rtBlock = $("rtBlock");
+  if (rtBlock) rtBlock.addEventListener("change", () => { exec("formatBlock", rtBlock.value); rtBlock.selectedIndex = 0; });
+
+  const rtSize = $("rtSize");
+  if (rtSize) rtSize.addEventListener("change", () => { if (rtSize.value) exec("fontSize", rtSize.value); rtSize.selectedIndex = 0; });
+}
+initRichText();
+
+init();
