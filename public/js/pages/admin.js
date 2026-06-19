@@ -789,7 +789,8 @@ async function loadExec() {
   try {
     const d = await api("/api/admin?action=content");
     const content = d.content || {};
-    if ($("heroHeadline")) $("heroHeadline").value = content.heroHeadline || "";
+    if ($("heroHeadlineMain")) $("heroHeadlineMain").value = content.heroHeadlineMain || "";
+    if ($("heroHeadlineAccent")) $("heroHeadlineAccent").value = content.heroHeadlineAccent || "";
     if ($("heroSub")) $("heroSub").value = content.heroSub || "";
   } catch {}
 }
@@ -814,11 +815,12 @@ async function revokeCode(key) {
 };
 
 async function saveContent() {
-  const heroHeadline = $("heroHeadline")?.value?.trim();
+  const heroHeadlineMain = $("heroHeadlineMain")?.value?.trim();
+  const heroHeadlineAccent = $("heroHeadlineAccent")?.value?.trim();
   const heroSub = $("heroSub")?.value?.trim();
   const msg = $("execMsg");
   try {
-    await api("/api/admin?action=set-content", { method: "POST", body: { heroHeadline, heroSub } });
+    await api("/api/admin?action=set-content", { method: "POST", body: { heroHeadlineMain, heroHeadlineAccent, heroSub } });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Homepage content updated.</div>`;
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
