@@ -1,45 +1,64 @@
-import { boot, api, renderRadar, esc } from "/js/app.js";
+import { boot, api, esc } from "/js/app.js";
 boot("/");
 
-// live pulse + radar blips with scroll-driven parallax
-let radarBlips = [];
+/* ==========================================================================
+   HOME RADAR — homepage-only, separate from the shared renderRadar() in
+   app.js (which dashboard.js and reports.js also use, so it's left alone).
+   Two blip types instead of one:
+     - signal/live blips: live or upcoming events, click -> /events#id
+     - green blips: the most recent published news articles, click -> /news
+   ========================================================================== */
+function renderHomeRadar(el, eventBlips, newsBlips, label) {
+  if (!el) return;
+  const all = [
+    ...eventBlips.slice(0, 9).map((b) => ({ ...b, kind: "event" })),
+    ...newsBlips.slice(0, 3).map((n) => ({ ...n, kind: "news" })),
+  ];
+  const dots = all.map((b, i) => {
+    const a = (i * 137.5 * Math.PI) / 180;
+    const r = 14 + (i % 5) * 16 + 8;
+    const x = 100 + Math.cos(a) * r;
+    const y = 100 + Math.sin(a) * r;
+    const isNews = b.kind === "news";
+    const href = isNews ? `/news?slug=${encodeURIComponent(b.slug)}` : (b.id ? `/events#${b.id}` : "/events");
+    const titleText = isNews ? `Latest: ${b.title}` : `${b.title} - ${b.scenario || ""}`;
+    const ringColor = isNews ? "var(--good)" : "var(--live)";
+    return `<a href="${href}">
+      <circle class="radar-blip ${isNews ? "news" : b.live ? "live" : ""}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${isNews ? "4.6" : b.live ? "4.2" : "3.2"}" style="animation-delay:${(i * 0.5).toFixed(2)}s"><title>${esc(titleText)}</title></circle>
+      ${isNews || b.live ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="none" stroke="${ringColor}" stroke-width="1" opacity="0.35" style="animation:radar-ping 2.2s ease-out infinite;animation-delay:${(i * 0.4).toFixed(2)}s"/>` : ""}
+    </a>`;
+  }).join("");
+  el.innerHTML = `
+    <svg viewBox="0 0 200 200" role="img" aria-label="Radar of live events and latest news" style="overflow:visible">
+      ${[28, 56, 84].map((r) => `<circle class="radar-ring" cx="100" cy="100" r="${r}"/>`).join("")}
+      <line class="radar-cross" x1="100" y1="14" x2="100" y2="186"/>
+      <line class="radar-cross" x1="14" y1="100" x2="186" y2="100"/>
+      ${dots}
+    </svg>
+    <div class="radar-sweep" aria-hidden="true"></div>
+    ${label ? `<div class="radar-label">${esc(label)}</div>` : ""}`;
+}
+
+let pulseBlips = [];
+let newsBlips = [];
+function paintRadar() {
+  const el = document.getElementById("heroRadar");
+  const liveCount = pulseBlips.filter((b) => b.live).length;
+  renderHomeRadar(el, pulseBlips, newsBlips, `${liveCount} live · ${newsBlips.length ? "latest news on radar" : "scanning"}`);
+}
+
 api("/api/events?action=pulse").then((d) => {
   document.getElementById("liveCount").textContent = d.live;
   document.getElementById("pulseLabel").textContent =
     d.live === 1 ? "event live right now" : "events live right now";
-  radarBlips = d.blips;
-  renderRadar(document.getElementById("heroRadar"), d.blips, `${d.live} live · ${d.upcoming} upcoming`);
-}).catch(() => renderRadar(document.getElementById("heroRadar"), [], "scanning"));
+  pulseBlips = d.blips || [];
+  paintRadar();
+}).catch(() => paintRadar());
 
-// Scroll-driven radar transform (Apple-style: radar zooms, tilts, and gains depth as you scroll)
-const radarEl = document.getElementById("heroRadar");
-if (radarEl) {
-  let ticking = false;
-  window.addEventListener("scroll", () => {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => {
-      const scrollY = window.scrollY;
-      const heroHeight = document.querySelector(".hero")?.offsetHeight || 600;
-      const progress = Math.min(scrollY / heroHeight, 1);
-      const scale = 1 + progress * 0.18;
-      const rotX = progress * 12;
-      const rotZ = progress * -6;
-      const opacity = 1 - progress * 0.4;
-      const blur = progress * 3;
-      radarEl.style.transform = `scale(${scale}) perspective(700px) rotateX(${rotX}deg) rotateZ(${rotZ}deg)`;
-      radarEl.style.opacity = opacity;
-      radarEl.style.filter = `blur(${blur}px)`;
-      // blips pulse faster as you scroll
-      const sweepEl = radarEl.querySelector(".radar-sweep");
-      if (sweepEl) {
-        const duration = Math.max(1.5, 4.5 - progress * 3);
-        sweepEl.style.animationDuration = `${duration}s`;
-      }
-      ticking = false;
-    });
-  }, { passive: true });
-}
+api("/api/news?action=list").then((d) => {
+  newsBlips = (d.articles || []).slice(0, 2).map((a) => ({ title: a.title, slug: a.slug }));
+  paintRadar();
+}).catch(() => {});
 
 // Recently completed ticker - loops forever, each item is clickable
 api("/api/events?action=recent").then((d) => {
@@ -66,11 +85,22 @@ const REVIEWS = [
   { img: "https://i.postimg.cc/dQLNcx8t/image3.webp", server: "Port Macquarie Roleplay", quote: "The health score and funnel showed us exactly where players were dropping off. Our retention is up every single week." },
   { img: "https://i.postimg.cc/jdf8Ln3x/image-4.webp", server: "Australia Roleplay", quote: "Best-time-to-host heatmap alone paid for Ultra. We moved our sessions and peak attendance jumped." },
   { img: "https://i.postimg.cc/kgFfy3ds/image5.webp", server: "Liberty County Patrol", quote: "Verified ER:LC numbers we can actually show staff — no more guessing how an event went." },
-  { img: "https://i.postimg.cc/7ZMmN8kP/image7.webp", server: "Riverside RP", quote: "Listed in two minutes, full server by start time. The discovery feed just works." },
   { img: "https://i.postimg.cc/MG6tPP67/image-3.webp", server: "Highway Patrol Division", quote: "Staff intelligence caught our quiet shifts. Response times are sharper than ever." },
   { img: "https://i.postimg.cc/C1d7YRnX/image-2.webp", server: "Metro Emergency RP", quote: "The AI summary reads like a proper debrief. Our hosts love it." },
   { img: "https://i.postimg.cc/tTf5g9hX/image-1.webp", server: "Coastal Roleplay", quote: "Predictive forecasting nailed our next session within five players. Genuinely impressive." },
 ];
+(function buildSpotlight() {
+  const host = document.getElementById("spotlightHost");
+  if (!host) return;
+  const r = { img: "https://i.postimg.cc/7ZMmN8kP/image7.webp", server: "Riverside RP", quote: "Listed in two minutes, full server by start time. The discovery feed just works." };
+  host.innerHTML = `
+    <div class="spotlight-img"><img src="${esc(r.img)}" alt="${esc(r.server)} in ER:LC" loading="lazy" referrerpolicy="no-referrer"></div>
+    <div class="spotlight-body">
+      <p class="spotlight-quote">&ldquo;${esc(r.quote)}&rdquo;</p>
+      <p class="spotlight-server"><span class="laptop-dot"></span>${esc(r.server)}</p>
+    </div>`;
+})();
+
 (function buildReviewRail() {
   const track = document.getElementById("reviewTrack");
   if (!track) return;
@@ -110,6 +140,17 @@ api("/api/events?action=pulse").then((d) => {
       <p style="margin-top:8px;font-size:.85rem">${esc(b.scenario || "Roleplay session")}</p>
     </a>`).join("");
 }).catch(() => {});
+
+// ---- FAQ accordion ----
+document.querySelectorAll(".faq-item").forEach((item) => {
+  const q = item.querySelector(".faq-q");
+  if (!q) return;
+  q.addEventListener("click", () => {
+    const wasOpen = item.classList.contains("open");
+    document.querySelectorAll(".faq-item.open").forEach((o) => { if (o !== item) o.classList.remove("open"); });
+    item.classList.toggle("open", !wasOpen);
+  });
+});
 
 // admin-editable content blocks
 fetch("/api/admin?action=content").then((r) => r.ok ? r.json() : null).then((d) => {
