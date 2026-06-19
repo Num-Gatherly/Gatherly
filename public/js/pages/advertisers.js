@@ -8,6 +8,41 @@ const PACKS = [
   { days: 14, price: "$18", note: "Best value" },
 ];
 let chosen = 7;
+let adImageUrl = null;
+
+const adDz = $("adDz"), adDzInput = $("adDzInput");
+adDz.addEventListener("click", () => adDzInput.click());
+adDz.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") adDzInput.click(); });
+["dragover", "dragenter"].forEach((t) => adDz.addEventListener(t, (e) => { e.preventDefault(); adDz.classList.add("drag"); }));
+["dragleave", "drop"].forEach((t) => adDz.addEventListener(t, (e) => { e.preventDefault(); adDz.classList.remove("drag"); }));
+adDz.addEventListener("drop", (e) => handleAdBanner(e.dataTransfer.files[0]));
+adDzInput.addEventListener("change", () => handleAdBanner(adDzInput.files[0]));
+
+async function handleAdBanner(file) {
+  const msg = $("adMsg");
+  if (!file) return;
+  if (!currentUser()) { msg.innerHTML = `<div class="alert alert-err">Log in first to upload a banner. <a href="/api/auth?action=start">Continue with Discord</a></div>`; return; }
+  if (file.size > 2 * 1024 * 1024) { msg.innerHTML = `<div class="alert alert-err">Banner must be under 2MB.</div>`; return; }
+  const okDims = await new Promise((res) => {
+    const img = new Image();
+    img.onload = () => res(img.naturalWidth === 960 && img.naturalHeight === 600);
+    img.onerror = () => res(false);
+    img.src = URL.createObjectURL(file);
+  });
+  if (!okDims) { msg.innerHTML = `<div class="alert alert-err">Banner must be exactly 960x600px. Resize it and try again.</div>`; return; }
+  $("adDzText").textContent = "Uploading…";
+  try {
+    const r = await fetch("/api/image?kind=ad", { method: "POST", body: file, credentials: "same-origin" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Upload failed.");
+    adImageUrl = location.origin + d.url;
+    adDz.innerHTML = `<span>Banner attached - click to replace</span><img src="${d.url}" alt="Ad banner preview">`;
+    adDz.appendChild(adDzInput);
+  } catch (e) {
+    $("adDzText").textContent = "Drag a 960x600 banner here, or click to choose a file";
+    msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`;
+  }
+}
 
 function renderPacks() {
   $("adPacks").innerHTML = PACKS.map((p) => `
@@ -25,7 +60,7 @@ $("adBuy").onclick = async () => {
   if (!currentUser()) { msg.innerHTML = `<div class="alert alert-err">Log in first. <a href="/api/auth?action=start">Continue with Discord</a></div>`; return; }
   const title = $("adTitle").value.trim();
   const link = $("adLink").value.trim();
-  const image = $("adImage").value.trim();
+  const image = adImageUrl;
   if (!title || !link) { msg.innerHTML = `<div class="alert alert-err">Add a headline and destination link.</div>`; return; }
   msg.innerHTML = `<div class="alert alert-ok">Scanning your ad and opening checkout&hellip;</div>`;
   try {
