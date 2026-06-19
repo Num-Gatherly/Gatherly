@@ -3,6 +3,15 @@ boot("/admin");
 
 const $ = (id) => document.getElementById(id);
 
+// Inline onerror="" attributes are blocked by the site's CSP, so broken
+// avatar/ad images are wired up after render instead.
+function wireImgFallback(host) {
+  if (!host) return;
+  host.querySelectorAll("img.js-img-fallback").forEach((img) => {
+    img.addEventListener("error", () => { img.style.display = "none"; }, { once: true });
+  });
+}
+
 let me = null;
 let activeTab = "support";
 let ticketPollTimer = null;
@@ -79,8 +88,8 @@ async function loadAds() {
             <div style="font-size:.74rem;color:var(--faint);margin-top:6px">Impressions ${a.impressions || 0} · Clicks ${a.clicks || 0}</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${a.status === "pending" ? `<button class="btn btn-ghost btn-sm" onclick="approveAd('${esc(a.id)}')">Approve</button>` : ""}
-            ${a.status !== "denied" ? `<button class="btn btn-ghost btn-sm" onclick="denyAd('${esc(a.id)}')">Deny</button>` : ""}
+            ${a.status === "pending" ? `<button class="btn btn-ghost btn-sm" data-action="approve-ad" data-id="${esc(a.id)}">Approve</button>` : ""}
+            ${a.status !== "denied" ? `<button class="btn btn-ghost btn-sm" data-action="deny-ad" data-id="${esc(a.id)}">Deny</button>` : ""}
           </div>
         </div>
       </div>`;
@@ -92,9 +101,9 @@ async function loadAds() {
     loadHouseAds();
   } catch (e) { host.innerHTML = `<p style="color:var(--bad,#ff7a7a)">${esc(e.message)}</p>`; }
 }
-window.approveAd = async (id) => { try { await api("/api/ads?action=approve", { method: "POST", body: { id } }); loadAds(); } catch (e) { alert(e.message); } };
-window.denyAd = async (id) => { const reason = prompt("Reason for denial:"); if (!reason) return; try { await api("/api/ads?action=deny", { method: "POST", body: { id, reason } }); loadAds(); } catch (e) { alert(e.message); } };
-window.saveAdConfig = async () => {
+async function approveAd(id) { try { await api("/api/ads?action=approve", { method: "POST", body: { id } }); loadAds(); } catch (e) { alert(e.message); } };
+async function denyAd(id) { const reason = prompt("Reason for denial:"); if (!reason) return; try { await api("/api/ads?action=deny", { method: "POST", body: { id, reason } }); loadAds(); } catch (e) { alert(e.message); } };
+async function saveAdConfig() {
   const msg = $("adCfgMsg");
   try {
     await api("/api/ads?action=config", { method: "POST", body: { rotateSec: +$("adRotateSec").value, houseWeight: +$("adHouseWeight").value, advertiserWeight: +$("adAdvWeight").value } });
@@ -123,20 +132,21 @@ async function loadHouseAds() {
             <strong style="display:block;margin-top:6px">${esc(a.title || "Untitled")}</strong>
             ${a.subtitle ? `<div style="font-size:.82rem;color:var(--muted);margin-top:2px">${esc(a.subtitle)}</div>` : ""}
             ${a.link ? `<div style="font-size:.78rem;margin-top:4px"><a href="${esc(a.link)}" target="_blank" rel="noopener nofollow">${esc(a.link)}</a></div>` : ""}
-            ${a.image ? `<img src="${esc(a.image)}" alt="" onerror="this.style.display='none'">` : ""}
+            ${a.image ? `<img src="${esc(a.image)}" alt="" class="js-img-fallback">` : ""}
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="editHouseAd('${esc(a.id)}')">Edit</button>
-            <button class="btn btn-ghost btn-sm" onclick="toggleHouseAd('${esc(a.id)}',${off})">${off ? "Enable" : "Disable"}</button>
-            <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" onclick="deleteHouseAd('${esc(a.id)}')">Delete</button>
+            <button class="btn btn-ghost btn-sm" data-action="edit-house-ad" data-id="${esc(a.id)}">Edit</button>
+            <button class="btn btn-ghost btn-sm" data-action="toggle-house-ad" data-id="${esc(a.id)}" data-off="${off}">${off ? "Enable" : "Disable"}</button>
+            <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" data-action="delete-house-ad" data-id="${esc(a.id)}">Delete</button>
           </div>
         </div>
       </div>`;
     }).join("");
+    wireImgFallback(host);
   } catch (e) { host.innerHTML = `<p style="color:var(--bad,#ff7a7a)">${esc(e.message)}</p>`; }
 }
 
-window.clearHouseAd = () => {
+function clearHouseAd() {
   ["houseAdId", "houseAdTitle", "houseAdSubtitle", "houseAdImage", "houseAdLink"].forEach((k) => { if ($(k)) $(k).value = ""; });
   if ($("houseAdKind")) $("houseAdKind").value = "gatherly";
   if ($("houseAdEnabled")) $("houseAdEnabled").checked = true;
@@ -144,7 +154,7 @@ window.clearHouseAd = () => {
   const msg = $("houseAdMsg"); if (msg) msg.innerHTML = "";
 };
 
-window.editHouseAd = (adId) => {
+function editHouseAd(adId) {
   const a = houseAdsCache.find((x) => x.id === adId);
   if (!a) return;
   if ($("houseAdId")) $("houseAdId").value = a.id || "";
@@ -158,7 +168,7 @@ window.editHouseAd = (adId) => {
   const msg = $("houseAdMsg"); if (msg) msg.innerHTML = "";
 };
 
-window.saveHouseAd = async () => {
+async function saveHouseAd() {
   const msg = $("houseAdMsg");
   const body = {
     id: $("houseAdId")?.value || undefined,
@@ -173,19 +183,19 @@ window.saveHouseAd = async () => {
   try {
     await api("/api/admin?action=house-ad-save", { method: "POST", body });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">House ad saved.</div>`;
-    window.clearHouseAd();
+    clearHouseAd();
     loadHouseAds();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.toggleHouseAd = async (id, currentlyOff) => {
+async function toggleHouseAd(id, currentlyOff) {
   try {
     await api("/api/admin?action=house-ad-save", { method: "POST", body: { id, enabled: currentlyOff } });
     loadHouseAds();
   } catch (e) { alert(e.message); }
 };
 
-window.deleteHouseAd = async (id) => {
+async function deleteHouseAd(id) {
   if (!confirm("Delete this house ad? This cannot be undone.")) return;
   try {
     await api("/api/admin?action=house-ad-delete", { method: "POST", body: { id } });
@@ -202,7 +212,7 @@ async function loadNews() {
     const { articles } = await api("/api/news?action=admin-list");
     if (!articles.length) { host.innerHTML = `<p style="color:var(--muted)">No articles yet. Click "New article" to get started.</p>`; return; }
     host.innerHTML = articles.map((a) => `
-      <div class="card" style="margin-bottom:8px;cursor:pointer" onclick="editNews('${esc(a.id)}')">
+      <div class="card" style="margin-bottom:8px;cursor:pointer" data-action="edit-news" data-id="${esc(a.id)}">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
           <div style="min-width:0">
             <strong>${esc(a.title)}</strong>
@@ -214,14 +224,14 @@ async function loadNews() {
   } catch (e) { host.innerHTML = `<p style="color:var(--bad,#ff7a7a)">${esc(e.message)}</p>`; }
 }
 
-window.newArticle = () => {
+function newArticle() {
   ["newsId", "newsTitleInput", "newsAuthor", "newsAvatar", "newsBanner", "newsExcerpt", "newsBlocks"].forEach((k) => { if ($(k)) $(k).value = ""; });
   if ($("newsBody")) $("newsBody").innerHTML = "";
   if ($("newsPublished")) $("newsPublished").checked = false;
   const msg = $("newsMsg"); if (msg) msg.innerHTML = "";
 };
 
-window.editNews = async (id) => {
+async function editNews(id) {
   try {
     const { articles } = await api("/api/news?action=admin-list");
     const a = articles.find((x) => x.id === id);
@@ -248,7 +258,7 @@ function blocksToHtml(blocks) {
   }).join("");
 }
 
-window.saveNews = async () => {
+async function saveNews() {
   const msg = $("newsMsg");
   const html = ($("newsBody")?.innerHTML || "").trim();
   const blocks = html ? [{ type: "html", value: html }] : [];
@@ -271,13 +281,13 @@ window.saveNews = async () => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.deleteNews = async () => {
+async function deleteNews() {
   const id = $("newsId").value;
   if (!id) return;
   if (!confirm("Delete this article? This cannot be undone.")) return;
   try {
     await api("/api/news?action=delete", { method: "POST", body: { id } });
-    window.newArticle(); loadNews();
+    newArticle(); loadNews();
   } catch (e) { alert(e.message); }
 };
 
@@ -309,15 +319,15 @@ async function loadChecklist() {
             <div style="font-size:.74rem;color:var(--faint);margin-top:4px">${esc(f.actor)} · ${new Date(f.at).toLocaleString()}</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="resolveFlag('${esc(f.key)}',this)">Resolve</button>
-            <button class="btn btn-ghost btn-sm" onclick="escalateFlag('${esc(f.key)}',this)">Escalate</button>
+            <button class="btn btn-ghost btn-sm" data-action="resolve-flag" data-key="${esc(f.key)}">Resolve</button>
+            <button class="btn btn-ghost btn-sm" data-action="escalate-flag" data-key="${esc(f.key)}">Escalate</button>
           </div>
         </div>
       </div>`).join("") : `<p style="color:var(--muted)">No security flags this week. All clear.</p>`;
 
     const tk = $("checklistTickets");
     if (tk) tk.innerHTML = (d.tickets || []).length ? d.tickets.map((t) => `
-      <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="document.querySelector('.cr-tab[data-tab=support]').click()">
+      <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer" data-action="goto-support">
         <span style="width:8px;height:8px;border-radius:50%;background:${t.escalated ? "var(--bad,#ff7a7a)" : t.assignedTo ? "var(--good,#69d99c)" : "var(--live,#ffb454)"};flex-shrink:0"></span>
         <div style="flex:1;min-width:0"><strong>${esc(t.subject || "No subject")}</strong>
           <div style="font-size:.8rem;color:var(--muted)">${esc(t.username)} ${t.escalated ? "· escalated" : t.assignedTo ? "· claimed" : "· unclaimed"}</div>
@@ -330,11 +340,11 @@ async function loadChecklist() {
   }
 }
 
-window.resolveFlag = async (key, btn) => {
+async function resolveFlag(key, btn) {
   try { await api("/api/admin?action=resolve-flag", { method: "POST", body: { key } }); if (btn) btn.closest(".card").style.opacity = ".4"; loadChecklist(); }
   catch (e) { alert(e.message); }
 };
-window.escalateFlag = async (key, btn) => {
+async function escalateFlag(key, btn) {
   try { await api("/api/admin?action=escalate-flag", { method: "POST", body: { key } }); if (btn) { btn.textContent = "Escalated"; btn.disabled = true; } }
   catch (e) { alert(e.message); }
 };
@@ -392,11 +402,11 @@ function openTicket(id, t) {
       <div style="max-height:340px;overflow-y:auto;margin-bottom:14px">${msgs || "<p style='color:var(--muted)'>No messages.</p>"}</div>
       <textarea id="staffReply" class="input" rows="3" placeholder="Type your reply..." style="width:100%;margin-bottom:10px"></textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="sendStaffReply('${esc(id)}')">Send reply</button>
+        <button class="btn btn-primary btn-sm" data-action="send-staff-reply" data-id="${esc(id)}">Send reply</button>
         ${t.assignedTo
-          ? `<button class="btn btn-ghost btn-sm" onclick="unclaimTicket('${esc(id)}')">Unclaim</button>`
-          : `<button class="btn btn-ghost btn-sm" onclick="claimTicket('${esc(id)}')">Claim</button>`}
-        <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" onclick="closeTicket('${esc(id)}')">Close ticket</button>
+          ? `<button class="btn btn-ghost btn-sm" data-action="unclaim-ticket" data-id="${esc(id)}">Unclaim</button>`
+          : `<button class="btn btn-ghost btn-sm" data-action="claim-ticket" data-id="${esc(id)}">Claim</button>`}
+        <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" data-action="close-ticket" data-id="${esc(id)}">Close ticket</button>
       </div>
       <div id="ticketMsg" style="margin-top:10px"></div>
     </div>`;
@@ -410,21 +420,21 @@ async function refreshOpenTicket(id) {
   loadTickets();
 }
 
-window.claimTicket = async (id) => {
+async function claimTicket(id) {
   try {
     await api(`/api/tickets?action=assign&id=${encodeURIComponent(id)}`, { method: "POST" });
     await refreshOpenTicket(id);
   } catch (e) { alert(e.message); }
 };
 
-window.unclaimTicket = async (id) => {
+async function unclaimTicket(id) {
   try {
     await api(`/api/tickets?action=unassign&id=${encodeURIComponent(id)}`, { method: "POST" });
     await refreshOpenTicket(id);
   } catch (e) { alert(e.message); }
 };
 
-window.sendStaffReply = async (id) => {
+async function sendStaffReply(id) {
   const text = $("staffReply")?.value?.trim();
   const msg = $("ticketMsg");
   if (!text) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter a reply first.</div>`; return; }
@@ -436,7 +446,7 @@ window.sendStaffReply = async (id) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.closeTicket = async (id) => {
+async function closeTicket(id) {
   const msg = $("ticketMsg");
   try {
     await api(`/api/tickets?action=close&id=${encodeURIComponent(id)}`, { method: "POST" });
@@ -458,7 +468,7 @@ async function loadUsers(q = "") {
     if (!users.length) { host.innerHTML = `<p style="color:var(--muted)">No users found.</p>`; return; }
     host.innerHTML = users.map((u) => `
       <div class="card user-row" data-id="${esc(u.id)}" style="margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:12px">
-        ${u.avatar && u.discordId ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png?size=64" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'">` : `<span style="width:36px;height:36px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0">${esc((u.username || "?")[0].toUpperCase())}</span>`}
+        ${u.avatar && u.discordId ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png?size=64" style="width:36px;height:36px;border-radius:50%;flex-shrink:0" class="js-img-fallback">` : `<span style="width:36px;height:36px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0">${esc((u.username || "?")[0].toUpperCase())}</span>`}
         <div style="flex:1;min-width:0">
           <strong>${esc(u.username)}</strong>
           ${u.globalName && u.globalName !== u.username ? `<span style="color:var(--muted);font-size:.82rem"> (${esc(u.globalName)})</span>` : ""}
@@ -466,6 +476,7 @@ async function loadUsers(q = "") {
         </div>
         <span style="font-size:.8rem;color:var(--muted)">${u.credits} credits</span>
       </div>`).join("");
+    wireImgFallback(host);
     host.querySelectorAll(".user-row").forEach((row) => {
       row.addEventListener("click", () => openUser(row.dataset.id, users.find((u) => u.id === row.dataset.id)));
     });
@@ -477,7 +488,7 @@ function openUser(id, u) {
   if (!host || !u) return;
   const isExec = me.role === "executive";
   const avatarHtml = u.avatar && u.discordId
-    ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png?size=128" style="width:52px;height:52px;border-radius:50%" onerror="this.style.display='none'">`
+    ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png?size=128" style="width:52px;height:52px;border-radius:50%" class="js-img-fallback">`
     : `<span style="width:52px;height:52px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;color:#fff">${esc((u.username || "?")[0].toUpperCase())}</span>`;
 
   host.innerHTML = `
@@ -498,31 +509,31 @@ function openUser(id, u) {
           <option value="pro" ${u.plan === "pro" ? "selected" : ""}>Gatherly Pro</option>
           <option value="ultra" ${u.plan === "ultra" ? "selected" : ""}>Gatherly Ultra</option>
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="setPlan('${esc(id)}')">Set plan</button>
+        <button class="btn btn-ghost btn-sm" data-action="set-plan" data-id="${esc(id)}">Set plan</button>
       </div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <input id="creditAmt" type="number" min="0" class="input" placeholder="Credits" style="width:100px">
-        <button class="btn btn-ghost btn-sm" onclick="adjustCredits('${esc(id)}','credits-add')">Add</button>
-        <button class="btn btn-ghost btn-sm" onclick="adjustCredits('${esc(id)}','credits-remove')">Remove</button>
-        <button class="btn btn-ghost btn-sm" onclick="adjustCredits('${esc(id)}','credits-set')">Set</button>
+        <button class="btn btn-ghost btn-sm" data-action="adjust-credits" data-id="${esc(id)}" data-credit-action="credits-add">Add</button>
+        <button class="btn btn-ghost btn-sm" data-action="adjust-credits" data-id="${esc(id)}" data-credit-action="credits-remove">Remove</button>
+        <button class="btn btn-ghost btn-sm" data-action="adjust-credits" data-id="${esc(id)}" data-credit-action="credits-set">Set</button>
       </div>
 
       <div style="margin-bottom:10px">
         <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Listing cap: <b>${u.effectiveCap === Infinity || u.effectiveCap === null ? "unlimited" : esc(String(u.effectiveCap))}</b> ${u.listingCapOverride !== null && u.listingCapOverride !== undefined ? `(override, plan default ${esc(String(u.planCapDefault))})` : `(plan default)`}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <input id="listingCapAmt" type="number" min="0" class="input" placeholder="Max listings" style="width:120px">
-          <button class="btn btn-ghost btn-sm" onclick="setListingCap('${esc(id)}')">Set cap</button>
-          <button class="btn btn-ghost btn-sm" onclick="setListingCap('${esc(id)}',true)">Reset to plan</button>
+          <button class="btn btn-ghost btn-sm" data-action="set-listing-cap" data-id="${esc(id)}">Set cap</button>
+          <button class="btn btn-ghost btn-sm" data-action="set-listing-cap" data-id="${esc(id)}" data-reset="true">Reset to plan</button>
         </div>
       </div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-        <button class="btn btn-ghost btn-sm" onclick="toggleSuspend('${esc(id)}',${!u.suspended})">${u.suspended ? "Unsuspend" : "Suspend"}</button>
-        <button class="btn btn-ghost btn-sm" onclick="wipeListings('${esc(id)}')">Wipe listings</button>
+        <button class="btn btn-ghost btn-sm" data-action="toggle-suspend" data-id="${esc(id)}" data-suspend="${!u.suspended}">${u.suspended ? "Unsuspend" : "Suspend"}</button>
+        <button class="btn btn-ghost btn-sm" data-action="wipe-listings" data-id="${esc(id)}">Wipe listings</button>
         ${u.supportBlacklisted
-          ? `<button class="btn btn-ghost btn-sm" onclick="removeBlacklist('${esc(id)}')">Remove blacklist</button>`
-          : `<button class="btn btn-ghost btn-sm" onclick="addBlacklist('${esc(id)}')">Blacklist support</button>`}
+          ? `<button class="btn btn-ghost btn-sm" data-action="remove-blacklist" data-id="${esc(id)}">Remove blacklist</button>`
+          : `<button class="btn btn-ghost btn-sm" data-action="add-blacklist" data-id="${esc(id)}">Blacklist support</button>`}
       </div>
 
       ${isExec ? `
@@ -532,17 +543,18 @@ function openUser(id, u) {
           <option value="admin" ${u.role === "admin" ? "selected" : ""}>Admin</option>
           <option value="executive" ${u.role === "executive" ? "selected" : ""}>Executive</option>
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="setRole('${esc(id)}')">Set role</button>
+        <button class="btn btn-ghost btn-sm" data-action="set-role" data-id="${esc(id)}">Set role</button>
       </div>
       <div style="margin-bottom:10px">
-        <button class="btn btn-sm" style="background:var(--red,#ff7a7a);color:#fff" onclick="deleteAccount('${esc(id)}','${esc(u.username)}')">Delete account</button>
+        <button class="btn btn-sm" style="background:var(--red,#ff7a7a);color:#fff" data-action="delete-account" data-id="${esc(id)}" data-username="${esc(u.username)}">Delete account</button>
       </div>` : ""}
 
       <div id="userMsg" style="margin-top:10px"></div>
     </div>`;
+  wireImgFallback(host);
 }
 
-window.setPlan = async (id) => {
+async function setPlan(id) {
   const plan = $("editPlan")?.value;
   const msg = $("userMsg");
   try {
@@ -552,7 +564,7 @@ window.setPlan = async (id) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.adjustCredits = async (id, action) => {
+async function adjustCredits(id, action) {
   const amount = parseInt($("creditAmt")?.value, 10);
   const msg = $("userMsg");
   if (!Number.isFinite(amount)) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter a valid number.</div>`; return; }
@@ -563,7 +575,7 @@ window.adjustCredits = async (id, action) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.setListingCap = async (id, reset) => {
+async function setListingCap(id, reset) {
   const msg = $("userMsg");
   const body = { userId: id };
   if (reset) { body.reset = true; }
@@ -580,7 +592,7 @@ window.setListingCap = async (id, reset) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.toggleSuspend = async (id, suspend) => {
+async function toggleSuspend(id, suspend) {
   const reason = suspend ? (prompt("Reason for suspension (optional):") || "") : "";
   const msg = $("userMsg");
   try {
@@ -590,7 +602,7 @@ window.toggleSuspend = async (id, suspend) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.wipeListings = async (id) => {
+async function wipeListings(id) {
   if (!confirm("Wipe all event listings for this user? This cannot be undone.")) return;
   const msg = $("userMsg");
   try {
@@ -599,7 +611,7 @@ window.wipeListings = async (id) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.addBlacklist = async (id) => {
+async function addBlacklist(id) {
   const reason = prompt("Reason for support blacklist:");
   if (!reason) return;
   const msg = $("userMsg");
@@ -610,7 +622,7 @@ window.addBlacklist = async (id) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.removeBlacklist = async (id) => {
+async function removeBlacklist(id) {
   const msg = $("userMsg");
   try {
     await api("/api/admin?action=blacklist-remove", { method: "POST", body: { userId: id } });
@@ -619,7 +631,7 @@ window.removeBlacklist = async (id) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.setRole = async (id) => {
+async function setRole(id) {
   const role = $("editRole")?.value || null;
   const msg = $("userMsg");
   try {
@@ -629,7 +641,7 @@ window.setRole = async (id) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.deleteAccount = async (id, username) => {
+async function deleteAccount(id, username) {
   if (!confirm(`Permanently delete the account for "${username}"? This will also wipe all their event listings and cannot be undone.`)) return;
   if (!confirm("Are you absolutely sure? This action is irreversible.")) return;
   const msg = $("userMsg");
@@ -658,26 +670,26 @@ async function loadEvents() {
           <div style="font-size:.8rem;color:var(--muted)">${esc(ev.scenario || "")} - ${new Date(ev.startsAt).toLocaleString()} ${ev.boosted ? "- BOOSTED" : ""}</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="adminBoost('${esc(ev.id)}',this)">${ev.boosted ? "Unboost" : "Boost"}</button>
-          <button class="btn btn-ghost btn-sm" onclick="adminEndEvent('${esc(ev.id)}')">End</button>
-          <button class="btn btn-sm" style="background:var(--red,#ff7a7a);color:#fff" onclick="adminDeleteEvent('${esc(ev.id)}')">Delete</button>
+          <button class="btn btn-ghost btn-sm" data-action="admin-boost" data-id="${esc(ev.id)}">${ev.boosted ? "Unboost" : "Boost"}</button>
+          <button class="btn btn-ghost btn-sm" data-action="admin-end-event" data-id="${esc(ev.id)}">End</button>
+          <button class="btn btn-sm" style="background:var(--red,#ff7a7a);color:#fff" data-action="admin-delete-event" data-id="${esc(ev.id)}">Delete</button>
         </div>
       </div>`).join("");
   } catch (e) { host.innerHTML = `<p style="color:var(--red,#ff7a7a)">${esc(e.message)}</p>`; }
 }
 
-window.adminBoost = async (id, btn) => {
+async function adminBoost(id, btn) {
   try { const d = await api("/api/admin?action=boost", { method: "POST", body: { id } }); btn.textContent = d.boosted ? "Unboost" : "Boost"; }
   catch (e) { alert(e.message); }
 };
 
-window.adminEndEvent = async (id) => {
+async function adminEndEvent(id) {
   if (!confirm("Force-end this event?")) return;
   try { await api("/api/admin?action=end-event", { method: "POST", body: { id } }); loadEvents(); }
   catch (e) { alert(e.message); }
 };
 
-window.adminDeleteEvent = async (id) => {
+async function adminDeleteEvent(id) {
   if (!confirm("Permanently delete this event?")) return;
   try { await api("/api/admin?action=delete-event", { method: "POST", body: { id } }); loadEvents(); }
   catch (e) { alert(e.message); }
@@ -695,13 +707,13 @@ async function loadAnnouncements() {
         <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px">
           <div style="flex:1">${esc(a.text)} ${a.link ? `<a href="${esc(a.link)}" target="_blank" style="font-size:.8rem">Link</a>` : ""}
             ${a.cta ? `<span class="announce-cta" style="margin-left:8px;pointer-events:none">${esc(a.cta.text)}</span>` : ""}</div>
-          <button class="btn btn-ghost btn-sm" onclick="removeAnnounce('${esc(a.id)}')">Remove</button>
+          <button class="btn btn-ghost btn-sm" data-action="remove-announce" data-id="${esc(a.id)}">Remove</button>
         </div>`).join("")
       : `<p style="color:var(--muted)">No active announcements.</p>`;
   } catch {}
 }
 
-window.addAnnounce = async () => {
+async function addAnnounce() {
   const text = $("announceText")?.value?.trim();
   const link = $("announceLink")?.value?.trim();
   const ctaText = $("announceCtaText")?.value?.trim();
@@ -718,13 +730,13 @@ window.addAnnounce = async () => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.removeAnnounce = async (id) => {
+async function removeAnnounce(id) {
   try { await api("/api/admin?action=announce-remove", { method: "POST", body: { id } }); loadAnnouncements(); }
   catch (e) { alert(e.message); }
 };
 
 /* ========================== NOTIFICATIONS ========================== */
-window.addNotification = async () => {
+async function addNotification() {
   const title = $("notifyTitle")?.value?.trim();
   const body = $("notifyBody")?.value?.trim();
   const image = $("notifyImage")?.value?.trim();
@@ -741,7 +753,7 @@ window.addNotification = async () => {
 };
 
 /* ========================== EXECUTIVE ========================== */
-window.claimExec = async () => {
+async function claimExec() {
   const code = $("execClaimCode")?.value?.trim();
   const msg = $("execClaimMsg");
   if (!code) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter the executive setup code.</div>`; return; }
@@ -767,7 +779,7 @@ async function loadExec() {
           <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px;opacity:${dead ? ".5" : "1"}">
             <code style="flex:1;font-size:.82rem">${esc(c.fingerprint)}</code>
             <span style="font-size:.74rem;color:var(--muted)">${esc(c.role)} · ${esc(status)}${c.redemptions ? ` · ${c.redemptions} used` : ""}</span>
-            ${!dead ? `<button class="btn btn-ghost btn-sm" onclick="revokeCode('${esc(c.key)}')">Revoke</button>` : ""}
+            ${!dead ? `<button class="btn btn-ghost btn-sm" data-action="revoke-code" data-key="${esc(c.key)}">Revoke</button>` : ""}
           </div>`;
         }).join("")
         : `<p style="color:var(--muted)">No codes generated yet. Codes are shown once at generation and stored hashed.</p>`;
@@ -782,7 +794,7 @@ async function loadExec() {
   } catch {}
 }
 
-window.genCode = async () => {
+async function genCode() {
   const msg = $("execMsg");
   try {
     const d = await api("/api/admin?action=gen-code", { method: "POST", body: {} });
@@ -791,7 +803,7 @@ window.genCode = async () => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.revokeCode = async (key) => {
+async function revokeCode(key) {
   if (!confirm("Revoke this code?")) return;
   const msg = $("execMsg");
   try {
@@ -801,7 +813,7 @@ window.revokeCode = async (key) => {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
-window.saveContent = async () => {
+async function saveContent() {
   const heroHeadline = $("heroHeadline")?.value?.trim();
   const heroSub = $("heroSub")?.value?.trim();
   const msg = $("execMsg");
@@ -943,5 +955,61 @@ function initRichText() {
   if (rtSize) rtSize.addEventListener("change", () => { if (rtSize.value) exec("fontSize", rtSize.value); rtSize.selectedIndex = 0; });
 }
 initRichText();
+
+/* ========================== ACTION ROUTER ==========================
+   The site's Content-Security-Policy blocks inline event handler
+   attributes (onclick, onerror, etc) for security, which is why none of
+   the buttons on this page were doing anything. Every button below is
+   wired through a single delegated listener via data-action attributes
+   instead, which works fine under the CSP since it's all real JS in
+   this module rather than inline HTML attributes. */
+const ACTIONS = {
+  "claim-exec": () => claimExec(),
+  "add-announce": () => addAnnounce(),
+  "remove-announce": (el) => removeAnnounce(el.dataset.id),
+  "add-notification": () => addNotification(),
+  "save-ad-config": () => saveAdConfig(),
+  "approve-ad": (el) => approveAd(el.dataset.id),
+  "deny-ad": (el) => denyAd(el.dataset.id),
+  "save-house-ad": () => saveHouseAd(),
+  "clear-house-ad": () => clearHouseAd(),
+  "edit-house-ad": (el) => editHouseAd(el.dataset.id),
+  "toggle-house-ad": (el) => toggleHouseAd(el.dataset.id, el.dataset.off === "true"),
+  "delete-house-ad": (el) => deleteHouseAd(el.dataset.id),
+  "new-article": () => newArticle(),
+  "refresh-news": () => loadNews(),
+  "edit-news": (el) => editNews(el.dataset.id),
+  "save-news": () => saveNews(),
+  "delete-news": () => deleteNews(),
+  "resolve-flag": (el) => resolveFlag(el.dataset.key, el),
+  "escalate-flag": (el) => escalateFlag(el.dataset.key, el),
+  "goto-support": () => switchTab("support"),
+  "send-staff-reply": (el) => sendStaffReply(el.dataset.id),
+  "claim-ticket": (el) => claimTicket(el.dataset.id),
+  "unclaim-ticket": (el) => unclaimTicket(el.dataset.id),
+  "close-ticket": (el) => closeTicket(el.dataset.id),
+  "set-plan": (el) => setPlan(el.dataset.id),
+  "adjust-credits": (el) => adjustCredits(el.dataset.id, el.dataset.creditAction),
+  "set-listing-cap": (el) => setListingCap(el.dataset.id, el.dataset.reset === "true"),
+  "toggle-suspend": (el) => toggleSuspend(el.dataset.id, el.dataset.suspend === "true"),
+  "wipe-listings": (el) => wipeListings(el.dataset.id),
+  "add-blacklist": (el) => addBlacklist(el.dataset.id),
+  "remove-blacklist": (el) => removeBlacklist(el.dataset.id),
+  "set-role": (el) => setRole(el.dataset.id),
+  "delete-account": (el) => deleteAccount(el.dataset.id, el.dataset.username),
+  "admin-boost": (el) => adminBoost(el.dataset.id, el),
+  "admin-end-event": (el) => adminEndEvent(el.dataset.id),
+  "admin-delete-event": (el) => adminDeleteEvent(el.dataset.id),
+  "gen-code": () => genCode(),
+  "revoke-code": (el) => revokeCode(el.dataset.key),
+  "save-content": () => saveContent(),
+};
+
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  const handler = ACTIONS[el.dataset.action];
+  if (handler) handler(el, e);
+});
 
 init();
