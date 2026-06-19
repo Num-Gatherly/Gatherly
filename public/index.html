@@ -13,163 +13,101 @@
   <link rel="stylesheet" href="/css/style.css">
   <style>
     body { overflow-x: hidden; }
-    @keyframes radar-ping {
-      0% { opacity: 0.8; transform: scale(1); }
-      100% { opacity: 0; transform: scale(2.5); }
-    }
 
-    .orb-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-    .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0; animation: orb-drift linear infinite; }
-    .orb-1 { width: 560px; height: 560px; background: radial-gradient(circle, rgba(62,108,224,0.28) 0%, transparent 70%); top: -180px; left: -120px; animation-duration: 28s; animation-delay: 0s; }
-    .orb-2 { width: 480px; height: 480px; background: radial-gradient(circle, rgba(127,168,255,0.18) 0%, transparent 70%); top: 30%; right: -160px; animation-duration: 34s; animation-delay: -10s; }
-    .orb-3 { width: 420px; height: 420px; background: radial-gradient(circle, rgba(62,108,224,0.14) 0%, transparent 70%); bottom: 10%; left: 20%; animation-duration: 40s; animation-delay: -22s; }
-    @keyframes orb-drift {
-      0%   { opacity: 0;  transform: translate(0px,0px) scale(1); }
-      10%  { opacity: 1; }
-      50%  { transform: translate(40px,-60px) scale(1.08); }
-      90%  { opacity: 1; }
-      100% { opacity: 0;  transform: translate(0px,0px) scale(1); }
-    }
-
-    #nav, .hero, .ticker-wrap, .section, footer { position: relative; z-index: 1; }
-
-    .nav {
-      background: rgba(9,13,19,0.55) !important;
-      backdrop-filter: blur(22px) saturate(160%);
-      -webkit-backdrop-filter: blur(22px) saturate(160%);
-      border-bottom: 1px solid rgba(148,170,205,0.10) !important;
-    }
-
-    .hero { padding: 110px 0 100px; overflow: visible; }
-    .hero-grid { gap: 64px; }
-    .hero h1       { opacity: 0; transform: translateY(36px); animation: fade-up 0.9s cubic-bezier(0.22,1,0.36,1) 0.10s forwards; }
-    .hero p.lede   { opacity: 0; transform: translateY(24px); animation: fade-up 0.9s cubic-bezier(0.22,1,0.36,1) 0.28s forwards; }
-    .hero-actions  { opacity: 0; transform: translateY(20px); animation: fade-up 0.9s cubic-bezier(0.22,1,0.36,1) 0.42s forwards; }
-    .hero-pulse    { opacity: 0; animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0s forwards; background: rgba(255,255,255,0.04); border: 1px solid rgba(148,170,205,0.18) !important; backdrop-filter: blur(10px); }
+    /* ---------- hero ---------- */
+    .hero { padding: 124px 0 104px; }
+    .hero-grid { grid-template-columns: 1.05fr 0.95fr; gap: 70px; }
+    .hero h1 { font-size: clamp(2.6rem, 6vw, 4.6rem); opacity: 0; transform: translateY(28px); animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0.08s forwards; }
+    .hero p.lede { font-size: 1.18rem; opacity: 0; transform: translateY(20px); animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0.20s forwards; }
+    .hero-actions { opacity: 0; transform: translateY(16px); animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0.32s forwards; }
+    .hero-actions .btn { border-radius: 999px; padding: 14px 26px; }
+    .hero-pulse { opacity: 0; animation: fade-up 0.6s cubic-bezier(0.22,1,0.36,1) 0s forwards; }
     @keyframes fade-up { to { opacity: 1; transform: none; } }
 
-    /* Hero title always fully white - no blue bleed */
-    .hero h1 { color: #fff; }
-    .hero h1 .accent { color: #fff; -webkit-text-fill-color: #fff; }
+    .hero-radar-wrap { opacity: 0; transform: translateY(20px); animation: fade-up 0.8s cubic-bezier(0.22,1,0.36,1) 0.18s forwards; }
+    .radar-legend { display: flex; gap: 20px; justify-content: center; margin-top: 16px; font-size: 0.82rem; color: var(--muted); }
+    .radar-legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .radar-legend i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+    .radar-legend .lg-live i { background: var(--live); }
+    .radar-legend .lg-news i { background: var(--good); }
+    .radar-blip.news { fill: var(--good); }
 
-    .radar { opacity: 0; transform: scale(0.88); animation: radar-in 1.1s cubic-bezier(0.22,1,0.36,1) 0.35s forwards; will-change: transform, opacity, filter; transition: transform 0.05s linear, opacity 0.05s linear; }
-    @keyframes radar-in { to { opacity: 1; transform: scale(1); } }
-
-    .card {
-      background: rgba(255,255,255,0.034) !important;
-      backdrop-filter: blur(18px) saturate(140%);
-      -webkit-backdrop-filter: blur(18px) saturate(140%);
-      border: 1px solid rgba(148,170,205,0.13) !important;
-      transition: transform 0.28s cubic-bezier(0.22,1,0.36,1), border-color 0.28s ease, box-shadow 0.28s ease;
-    }
-    .card:hover {
-      transform: translateY(-5px) scale(1.012);
-      border-color: rgba(127,168,255,0.32) !important;
-      box-shadow: 0 24px 60px -16px rgba(62,108,224,0.22), 0 0 0 1px rgba(127,168,255,0.10);
-    }
-
-    .stat {
-      background: rgba(255,255,255,0.03) !important;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(148,170,205,0.12) !important;
-      transition: transform 0.28s cubic-bezier(0.22,1,0.36,1), border-color 0.28s ease;
-    }
-    .stat:hover { transform: translateY(-4px); border-color: rgba(127,168,255,0.28) !important; }
-    .stat b {
-      background: linear-gradient(135deg, #fff 30%, var(--signal));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
-
-    .section + .section { border-top: 1px solid rgba(127,168,255,0.10) !important; }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #5a8fff 0%, #3e6ce0 100%);
-      color: #fff;
-      position: relative; overflow: hidden;
-      transition: transform 0.18s ease, box-shadow 0.3s ease, background 0.2s ease;
-    }
-    .btn-primary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%); pointer-events: none; }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 28px 4px rgba(127,168,255,0.35); background: linear-gradient(135deg, #7aadff 0%, #5a8fff 100%); }
-    .btn-ghost {
-      background: rgba(255,255,255,0.04);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(148,170,205,0.22) !important;
-      transition: transform 0.18s ease, border-color 0.2s ease, background 0.2s ease;
-    }
-    .btn-ghost:hover { transform: translateY(-2px); background: rgba(127,168,255,0.08); border-color: rgba(127,168,255,0.45) !important; }
-
-    #particleCanvas { position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.45; }
-
-    .ticker-wrap {
-      background: rgba(255,255,255,0.025) !important;
-      backdrop-filter: blur(12px);
-      border-top: 1px solid rgba(148,170,205,0.10) !important;
-      border-bottom: 1px solid rgba(148,170,205,0.10) !important;
-    }
-    .ticker-item { color: var(--muted); }
-    .ticker-item b { color: var(--text); }
     .ticker { animation: ticker-scroll 60s linear infinite; }
     @keyframes ticker-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-33.333%); } }
+    .ticker-item { color: var(--muted); }
+    .ticker-item b { color: var(--text); }
 
-    .cta-section { position: relative; overflow: hidden; }
-    .cta-section::before { content: ""; position: absolute; inset: -2px; background: linear-gradient(180deg, transparent 0%, rgba(62,108,224,0.08) 50%, transparent 100%); pointer-events: none; }
-    .cta-section .wrap { position: relative; }
+    /* ---------- section header (used sparingly, not on every section) ---------- */
+    .sect-head { max-width: 600px; margin-bottom: 38px; }
+    .sect-head h2 { font-size: clamp(1.8rem, 3.4vw, 2.6rem); }
+    .sect-head p { margin-top: 10px; }
+    .sect-tag { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: block; }
 
-    .mock { background: rgba(0,0,0,0.28) !important; border: 1px solid rgba(148,170,205,0.10) !important; backdrop-filter: blur(6px); }
+    /* ---------- editorial spotlight testimonial ---------- */
+    .spotlight { display: grid; grid-template-columns: 1.1fr 0.9fr; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; align-items: stretch; }
+    .spotlight-img { position: relative; min-height: 320px; background: var(--ink-2); }
+    .spotlight-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .spotlight-body { padding: 44px 42px; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+    .spotlight-quote { font-family: var(--font-display); font-size: 1.55rem; font-weight: 500; line-height: 1.35; color: var(--text); }
+    .spotlight-server { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--muted); font-weight: 600; }
+    @media (max-width: 860px) { .spotlight { grid-template-columns: 1fr; } .spotlight-img { min-height: 220px; } }
 
-    .section h2 {
-      background: linear-gradient(135deg, #e9eef6 40%, rgba(127,168,255,0.85));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
+    /* ---------- alternating product rows ---------- */
+    .alt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+    .alt-row + .alt-row { margin-top: 64px; }
+    .alt-row.reverse .alt-text { order: 2; }
+    .alt-row.reverse .alt-visual { order: 1; }
+    .alt-text h3 { font-size: 1.8rem; margin-bottom: 14px; }
+    .alt-text p { max-width: 420px; }
+    .win { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--ink-2); }
+    .win-bar { display: flex; gap: 6px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+    .win-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); display: block; }
+    .win-shot { position: relative; aspect-ratio: 16/10; }
+    .win-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .win-overlay { position: absolute; left: 14px; bottom: 14px; background: rgba(9,13,19,0.86); border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; max-width: 240px; }
+    .win-overlay b { display: block; font-size: 0.86rem; margin-bottom: 3px; }
+    .win-report { padding: 22px; display: flex; gap: 24px; align-items: center; }
+    .win-report .funnel-mini { flex: 1; display: grid; gap: 9px; }
+    .win-report .funnel-mini .row { display: flex; justify-content: space-between; font-size: 0.84rem; }
+    .win-report .funnel-mini .row span { color: var(--muted); }
+    .win-report .funnel-mini .row b { font-variant-numeric: tabular-nums; }
+    @media (max-width: 860px) { .alt-row, .win-report { grid-template-columns: 1fr; } .alt-row.reverse .alt-text, .alt-row.reverse .alt-visual { order: initial; } .win-report { flex-direction: column; align-items: stretch; } }
 
-    .hero-parallax { will-change: transform; }
+    /* ---------- bento features ---------- */
+    .bento { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 168px; grid-auto-flow: dense; gap: 16px; }
+    .bento .card { display: flex; flex-direction: column; justify-content: flex-end; transition: border-color 0.2s ease; }
+    .bento .card:hover { border-color: var(--line-strong); }
+    .bento .b-lg { grid-column: span 2; grid-row: span 2; justify-content: space-between; }
+    .bento .b-md { grid-column: span 2; }
+    .bento .b-sm { grid-column: span 1; }
+    @media (max-width: 860px) { .bento { grid-template-columns: repeat(2, 1fr); } .bento .b-lg { grid-column: span 2; grid-row: span 1; } }
+    @media (max-width: 560px) { .bento { grid-template-columns: 1fr; } .bento .b-lg, .bento .b-md { grid-column: span 1; } }
 
-    @keyframes glass-shimmer {
-      0%   { opacity: 0; transform: translateY(28px) scale(0.97); }
-      100% { opacity: 1; transform: none; }
-    }
-    .reveal { opacity: 0; transform: translateY(26px); transition: none !important; }
-    .reveal.in { animation: glass-shimmer 0.6s cubic-bezier(0.22,1,0.36,1) both; }
+    /* ---------- quiet stat band ---------- */
+    .quiet-stats { display: flex; flex-wrap: wrap; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .quiet-stat { flex: 1; min-width: 220px; padding: 38px 30px; border-left: 1px solid var(--line); }
+    .quiet-stat:first-child { border-left: 0; }
+    .quiet-stat b { display: block; font-family: var(--font-display); font-size: 2.3rem; font-weight: 600; }
+    .quiet-stat span { font-size: 0.85rem; color: var(--muted); }
+    @media (max-width: 700px) { .quiet-stat { border-left: 0; border-top: 1px solid var(--line); } .quiet-stat:first-child { border-top: 0; } }
 
-    .hero-float-badge {
-      position: absolute; right: -18px; top: 18px;
-      background: rgba(255,255,255,0.06); backdrop-filter: blur(14px);
-      border: 1px solid rgba(127,168,255,0.25); border-radius: 12px;
-      padding: 10px 16px; font-size: 0.78rem; color: var(--signal);
-      font-weight: 600; letter-spacing: 0.06em;
-      animation: float-y 4s ease-in-out infinite; pointer-events: none;
-    }
-    @keyframes float-y { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
+    /* ---------- FAQ accordion ---------- */
+    .faq-list { border-top: 1px solid var(--line); max-width: 760px; }
+    .faq-item { border-bottom: 1px solid var(--line); }
+    .faq-q { width: 100%; text-align: left; background: none; border: none; color: var(--text); font-family: var(--font-display); font-size: 1.08rem; font-weight: 500; padding: 24px 2px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .faq-q .plus { font-size: 1.5rem; color: var(--muted); transition: transform 0.25s ease; flex-shrink: 0; line-height: 1; }
+    .faq-item.open .faq-q .plus { transform: rotate(45deg); }
+    .faq-a { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+    .faq-item.open .faq-a { max-height: 260px; }
+    .faq-a p { padding: 0 2px 24px; max-width: 600px; }
 
-    footer { background: rgba(9,13,19,0.5); backdrop-filter: blur(12px); border-top: 1px solid rgba(148,170,205,0.10) !important; }
-
-    @media (max-width: 900px) { .hero-float-badge { display: none; } }
-
-    /* Hero rotating verb: strike-through, then swap to the next word */
-    .word-rotate { position: relative; display: inline-block; color: var(--signal); font-weight: 600; }
-    .word-rotate .wr-word { display: inline-block; transition: opacity .3s ease, transform .3s ease; }
-    .word-rotate .wr-strike {
-      position: absolute; left: -2px; right: -2px; top: 56%; height: 2px; width: 0;
-      background: currentColor; border-radius: 2px;
-    }
-    .word-rotate.striking .wr-strike { width: calc(100% + 4px); transition: width .36s cubic-bezier(.65,0,.35,1); }
-    .word-rotate.swapping .wr-word { opacity: 0; transform: translateY(-7px); }
-    @media (prefers-reduced-motion: reduce) {
-      .word-rotate .wr-strike { display: none; }
-      .word-rotate .wr-word { transition: none; }
-    }
+    /* ---------- closing CTA ---------- */
+    .cta-section { text-align: center; padding: 110px 0; }
+    .cta-section h2 { font-size: clamp(2rem, 4vw, 3rem); }
+    .cta-section .btn { border-radius: 999px; padding: 15px 32px; }
   </style>
 </head>
 <body>
-
-<div class="orb-layer" aria-hidden="true">
-  <div class="orb orb-1"></div>
-  <div class="orb orb-2"></div>
-  <div class="orb orb-3"></div>
-</div>
-
-<canvas id="particleCanvas" aria-hidden="true"></canvas>
 
 <nav id="nav"></nav>
 
@@ -178,15 +116,18 @@
     <div>
       <span class="hero-pulse"><b id="liveCount">-</b><span id="pulseLabel">events live right now</span></span>
       <h1 id="heroHeadline">Fill every session.<br>Then <span class="accent">prove it worked.</span></h1>
-      <p class="lede" id="heroSub">The ER:LC event platform built to <span class="word-rotate" id="heroRotate"><span class="wr-word">elevate</span><span class="wr-strike" aria-hidden="true"></span></span> your server.</p>
+      <p class="lede" id="heroSub">List your ER:LC event, reach players who are already looking, and get a verified report the moment it ends.</p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="/advertise">Advertise your event</a>
         <a class="btn btn-ghost" href="/events">Browse live events</a>
       </div>
     </div>
-    <div class="hero-parallax" style="position:relative">
+    <div class="hero-radar-wrap">
       <div class="radar" id="heroRadar" aria-hidden="false"></div>
-      <div class="hero-float-badge">Live data feed</div>
+      <div class="radar-legend">
+        <span class="lg-live"><i></i>Live event</span>
+        <span class="lg-news"><i></i>Latest news</span>
+      </div>
     </div>
   </div>
 </header>
@@ -197,85 +138,101 @@
 
 <section class="section">
   <div class="wrap">
-    <div class="reveal"><span class="kicker">Projected reach</span>
-      <h2>Built where ER:LC players already are</h2>
-      <p style="margin-top:10px;max-width:560px">Gatherly hasn't launched publicly yet, so these are <b>projected forecasts</b> modelled on the ER:LC roleplay community &mdash; not live results. We'll swap them for verified numbers the moment we're live.</p></div>
-    <div class="grid grid-3" style="margin-top:34px">
-      <div class="stat reveal reveal-d1"><b>38k+</b><span>Projected players browsing Gatherly listings each week</span></div>
-      <div class="stat reveal reveal-d2"><b>1,200+</b><span>Projected roleplay events advertised every month</span></div>
-      <div class="stat reveal reveal-d3"><b>3.1%</b><span>Forecast listing-view to in-server join conversion</span></div>
-    </div>
-    <p class="note reveal" style="margin-top:18px">Figures are projected forecasting for pre-launch planning only.</p>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="reveal"><span class="kicker">How it works</span>
-      <h2>You list it. We measure it.</h2>
-      <p style="margin-top:10px;max-width:560px">The same event, seen from both sides: what players see in the feed, and the report you get back when it ends.</p></div>
-    <div class="split" style="margin-top:34px">
-      <div class="card reveal reveal-d1">
-        <span class="badge">What players see</span>
-        <h3>Your listing in the discovery feed</h3>
-        <div class="mock">
-          <div class="row"><b>Friday Night Border Patrol</b><span class="badge badge-live">Live</span></div>
-          <div class="row"><span>Scenario</span><b>Border patrol</b></div>
-          <div class="row"><span>Starts</span><b>7:00 PM, your timezone</b></div>
-          <div class="row"><span>Ends</span><b>8:30 PM &middot; 90 min max</b></div>
-          <div class="row"><span>Join</span><b style="color:var(--signal)">One-click code reveal</b></div>
-        </div>
-      </div>
-      <div class="card reveal reveal-d2">
-        <span class="badge badge-boost">What you get back</span>
-        <h3>The engagement report</h3>
-        <div class="mock">
-          <div class="row"><span>Event Health Score</span><b style="color:var(--signal)">78 / 100</b></div>
-          <div class="row"><span>Funnel</span><b>820 views &rarr; 29 entries &rarr; 19 retained</b></div>
-          <div class="row"><span>Benchmark</span><b>71st percentile for border patrols</b></div>
-          <div class="row"><span>Forecast</span><b>Next event: 55-70 joins projected</b></div>
-          <div class="row"><span>AI summary</span><b>What happened, in plain English</b></div>
-        </div>
-        <a href="/reports" class="btn btn-ghost btn-sm" style="align-self:flex-start">See a full sample report</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="reveal"><span class="kicker">Features</span>
-      <h2>Everything a host needs, nothing they don't</h2></div>
-    <div class="grid grid-3" style="margin-top:34px">
-      <div class="card reveal reveal-d1"><h3>Event Health Score</h3><p>One number, 0 to 100, scoring fill rate, retention, growth, conversion, and staffing. The score hosts compete on.</p></div>
-      <div class="card reveal reveal-d2"><h3>Player lifecycle funnel</h3><p>See exactly where players drop off: listing view, code reveal, server entry, 30-minute retention.</p></div>
-      <div class="card reveal reveal-d3"><h3>Predictive forecasting</h3><p>After three events, Gatherly projects joins and peak attendance for your next session from your own history.</p></div>
-      <div class="card reveal reveal-d1"><h3>Scenario benchmarking</h3><p>Your event ranked against every same-scenario event on the platform in the last 30 days. Only a network can do this.</p></div>
-      <div class="card reveal reveal-d2"><h3>Staff intelligence</h3><p>Mod-call response times, per-staff command activity, and idle staff detection. A staff audit inside every report.</p></div>
-      <div class="card reveal reveal-d3"><h3>AI report summaries</h3><p>Every report ends with a plain-English read of what happened, the trend it continues, and one concrete fix for next time.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="section" style="overflow:hidden">
-  <div class="wrap">
-    <div class="reveal"><span class="kicker">From the community</span>
+    <div class="sect-head reveal"><span class="sect-tag">From the community</span>
       <h2>Real servers. Real sessions.</h2>
-      <p style="margin-top:10px;max-width:560px">Hosts across the Australian ER:LC scene use Gatherly to fill events and prove what worked. Here's a look inside their servers.</p>
+      <p>Hosts across the Australian ER:LC scene use Gatherly to fill events and prove what worked.</p>
     </div>
+    <div class="spotlight reveal" id="spotlightHost"></div>
   </div>
-  <div class="laptop-rail-wrap reveal" id="reviewRail" aria-label="Community screenshots and reviews">
+  <div class="laptop-rail-wrap reveal" id="reviewRail" aria-label="Community screenshots and reviews" style="margin-top:8px">
     <div class="laptop-rail" id="reviewTrack"></div>
   </div>
 </section>
 
 <section class="section">
   <div class="wrap">
-    <div class="reveal" style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap">
-      <div><span class="kicker">Live right now</span><h2>Events filling up as we speak</h2></div>
-      <a class="btn btn-ghost btn-sm" href="/events">Browse all events</a>
+    <div class="sect-head reveal"><span class="sect-tag">How it works</span>
+      <h2>You list it. We measure it.</h2>
     </div>
-    <div class="grid grid-3 reveal" id="liveEventsGrid" style="margin-top:30px">
+
+    <div class="alt-row reveal">
+      <div class="alt-text">
+        <h3>Your listing finds the players already looking</h3>
+        <p>The discovery feed surfaces live and upcoming sessions by scenario, server, and start time. One click reveals the join code.</p>
+      </div>
+      <div class="alt-visual win">
+        <div class="win-bar"><i></i><i></i><i></i></div>
+        <div class="win-shot">
+          <img src="https://i.postimg.cc/MG6tPP67/image-3.webp" alt="A live ER:LC roleplay session" loading="lazy" referrerpolicy="no-referrer">
+          <div class="win-overlay"><b>Friday Night Border Patrol</b><span class="badge badge-live" style="margin-top:4px">Live</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alt-row reverse reveal">
+      <div class="alt-text">
+        <h3>A verified report waiting when it ends</h3>
+        <p>Pulled straight from the ER:LC API: an Event Health Score, the player drop-off funnel, and a plain-English summary of what happened.</p>
+        <a href="/reports" class="btn btn-ghost btn-sm" style="margin-top:6px">See a full sample report</a>
+      </div>
+      <div class="alt-visual win">
+        <div class="win-bar"><i></i><i></i><i></i></div>
+        <div class="win-report">
+          <div class="score-dial" style="width:120px;height:120px">
+            <svg viewBox="0 0 170 170" width="120" height="120">
+              <circle cx="85" cy="85" r="70" fill="none" stroke="var(--line-strong)" stroke-width="10"/>
+              <circle cx="85" cy="85" r="70" fill="none" stroke="var(--signal)" stroke-width="10" stroke-linecap="round" stroke-dasharray="263.894" stroke-dashoffset="58.057"/>
+            </svg>
+            <div class="val"><b style="color:var(--signal);font-size:1.8rem">78</b><span style="font-size:.62rem">Health Score</span></div>
+          </div>
+          <div class="funnel-mini">
+            <div class="row"><span>Listing views</span><b>820</b></div>
+            <div class="row"><span>Code reveals</span><b>54</b></div>
+            <div class="row"><span>Server entries</span><b>29</b></div>
+            <div class="row"><span>Retained 30m+</span><b>19</b></div>
+            <div class="row"><span>Benchmark</span><b style="color:var(--signal)">71st pct.</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="sect-head reveal"><span class="sect-tag">Features</span>
+      <h2>Everything a host needs</h2>
+    </div>
+    <div class="bento reveal">
+      <div class="card b-lg">
+        <div>
+          <h3>Event Health Score</h3>
+          <p>One number, 0 to 100, scoring fill rate, retention, growth, conversion, and staffing.</p>
+        </div>
+        <div class="score-dial" style="width:90px;height:90px;align-self:flex-end">
+          <svg viewBox="0 0 170 170" width="90" height="90">
+            <circle cx="85" cy="85" r="70" fill="none" stroke="var(--line-strong)" stroke-width="12"/>
+            <circle cx="85" cy="85" r="70" fill="none" stroke="var(--good)" stroke-width="12" stroke-linecap="round" stroke-dasharray="263.894" stroke-dashoffset="58.057"/>
+          </svg>
+          <div class="val"><b style="color:var(--good);font-size:1.5rem">78</b></div>
+        </div>
+      </div>
+      <div class="card b-sm"><h3 style="font-size:1.02rem">Lifecycle funnel</h3><p style="font-size:.86rem">Where players drop off, from listing view to 30-minute retention.</p></div>
+      <div class="card b-sm"><h3 style="font-size:1.02rem">Predictive forecasting</h3><p style="font-size:.86rem">Joins and peak attendance projected from your own history.</p></div>
+      <div class="card b-md"><h3>Scenario benchmarking</h3><p>Your event ranked against every same-scenario event on the platform in the last 30 days.</p></div>
+      <div class="card b-sm"><h3 style="font-size:1.02rem">Staff intelligence</h3><p style="font-size:.86rem">Mod-call response times and idle staff detection.</p></div>
+      <div class="card b-sm"><h3 style="font-size:1.02rem">AI report summaries</h3><p style="font-size:.86rem">A plain-English read of what happened and one fix for next time.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap" style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap">
+    <div class="reveal"><span class="sect-tag">Live right now</span><h2 style="font-size:1.9rem">Events filling up as we speak</h2></div>
+    <a class="btn btn-ghost btn-sm" href="/events">Browse all events</a>
+  </div>
+  <div class="wrap">
+    <div class="grid grid-3 reveal" id="liveEventsGrid" style="margin-top:28px">
       <p class="note" style="grid-column:1/-1">Loading live events&hellip;</p>
     </div>
   </div>
@@ -284,20 +241,39 @@
 <!-- Advertising slot (rotated, staff-approved) -->
 <div class="wrap"><div class="ad-slot" data-ad-slot="home-mid"></div></div>
 
+<section class="quiet-stats reveal">
+  <div class="quiet-stat"><b>38k+</b><span>Projected players browsing Gatherly listings each week</span></div>
+  <div class="quiet-stat"><b>1,200+</b><span>Projected roleplay events advertised every month</span></div>
+  <div class="quiet-stat"><b>3.1%</b><span>Forecast listing-view to in-server join conversion</span></div>
+</section>
+<div class="wrap"><p class="note reveal" style="margin-top:16px">Gatherly hasn't launched publicly yet, so the figures above are projected forecasts modelled on the ER:LC roleplay community, not live results. We'll swap them for verified numbers the moment we're live.</p></div>
+
 <section class="section">
   <div class="wrap">
-    <div class="reveal"><span class="kicker">FAQ</span><h2>Frequently asked questions</h2></div>
-    <div class="grid grid-2" style="margin-top:34px">
-      <div class="card reveal"><h3>How does pricing work?</h3><p>Listing an event is free. Paid plans add boost credits, full analytics, and Discord delivery. Pay by card through Stripe's secure checkout, or with Robux via gamepass verification. <a href="/pricing">See pricing</a>.</p></div>
-      <div class="card reveal reveal-d1"><h3>How do reports work?</h3><p>Connect your ER:LC server API key in Settings. When your event ends, Gatherly pulls your server data for the event window and compiles the full report. <a href="/reports">See a sample</a>.</p></div>
-      <div class="card reveal"><h3>How long can events run?</h3><p>Events run up to 90 minutes. When the end time passes, the listing leaves the discovery feed automatically and the report window closes.</p></div>
-      <div class="card reveal reveal-d1"><h3>Is my server data safe?</h3><p>Your API key is encrypted at rest with AES-256 and only used to read statistics for your event window. Gatherly never issues commands to your server. Full details in the <a href="/privacy">privacy policy</a>.</p></div>
+    <div class="sect-head reveal"><span class="sect-tag">FAQ</span><h2>Frequently asked questions</h2></div>
+    <div class="faq-list reveal">
+      <div class="faq-item">
+        <button class="faq-q">How does pricing work?<span class="plus">+</span></button>
+        <div class="faq-a"><p>Listing an event is free. Paid plans add boost credits, full analytics, and Discord delivery. Pay by card through Stripe's secure checkout, or with Robux via gamepass verification. <a href="/pricing">See pricing</a>.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">How do reports work?<span class="plus">+</span></button>
+        <div class="faq-a"><p>Connect your ER:LC server API key in Settings. When your event ends, Gatherly pulls your server data for the event window and compiles the full report. <a href="/reports">See a sample</a>.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">How long can events run?<span class="plus">+</span></button>
+        <div class="faq-a"><p>Events run up to 90 minutes. When the end time passes, the listing leaves the discovery feed automatically and the report window closes.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Is my server data safe?<span class="plus">+</span></button>
+        <div class="faq-a"><p>Your API key is encrypted at rest with AES-256 and only used to read statistics for your event window. Gatherly never issues commands to your server. Full details in the <a href="/privacy">privacy policy</a>.</p></div>
+      </div>
     </div>
   </div>
 </section>
 
 <section class="section cta-section">
-  <div class="wrap" style="text-align:center">
+  <div class="wrap">
     <div class="reveal">
       <h2>Your next event deserves a full server</h2>
       <p style="margin:14px auto 28px;max-width:480px">List in under two minutes, reach ER:LC players who are already looking, and finish with a report you can show your staff team.</p>
@@ -311,94 +287,10 @@
 <script type="module" src="/js/pages/index.js"></script>
 <script>
   (function () {
-    const canvas = document.getElementById("particleCanvas");
-    const ctx = canvas.getContext("2d");
-    let W, H, particles = [];
-    function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
-    resize();
-    window.addEventListener("resize", resize, { passive: true });
-    function rand(a, b) { return a + Math.random() * (b - a); }
-    function spawn() {
-      return { x: Math.random()*W, y: Math.random()*H, r: rand(0.6,1.8), vx: rand(-0.12,0.12), vy: rand(-0.25,-0.06), alpha: rand(0.1,0.55), life: 0, maxLife: rand(180,420) };
-    }
-    for (let i = 0; i < 80; i++) { const p = spawn(); p.life = Math.random()*p.maxLife; particles.push(p); }
-    function draw() {
-      ctx.clearRect(0,0,W,H);
-      for (const p of particles) {
-        const t = p.life/p.maxLife;
-        const fade = t < 0.12 ? t/0.12 : t > 0.82 ? (1-t)/0.18 : 1;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-        ctx.fillStyle = `rgba(127,168,255,${p.alpha*fade})`; ctx.fill();
-        p.x += p.vx; p.y += p.vy; p.life++;
-        if (p.life >= p.maxLife) { Object.assign(p, spawn()); p.life = 0; }
-      }
-      requestAnimationFrame(draw);
-    }
-    draw();
-
-    const parallaxEl = document.querySelector(".hero-parallax");
-    if (parallaxEl) {
-      let tx = 0, ty = 0, cx = 0, cy = 0;
-      document.addEventListener("mousemove", (e) => {
-        tx = ((e.clientX - window.innerWidth/2)  / (window.innerWidth/2))  * 14;
-        ty = ((e.clientY - window.innerHeight/2) / (window.innerHeight/2)) * 10;
-      }, { passive: true });
-      (function lerp() {
-        cx += (tx-cx)*0.07; cy += (ty-cy)*0.07;
-        parallaxEl.style.transform = `translate(${cx}px,${cy}px)`;
-        requestAnimationFrame(lerp);
-      })();
-    }
-
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); observer.unobserve(e.target); } });
     }, { threshold: 0.12 });
     document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
-
-    document.querySelectorAll(".card").forEach((card) => {
-      card.addEventListener("mousemove", (e) => {
-        const r = card.getBoundingClientRect();
-        const x = ((e.clientX-r.left)/r.width  - 0.5)*10;
-        const y = ((e.clientY-r.top) /r.height - 0.5)*10;
-        card.style.transform = `translateY(-5px) perspective(600px) rotateY(${x}deg) rotateX(${-y}deg) scale(1.012)`;
-      });
-      card.addEventListener("mouseleave", () => { card.style.transform = ""; });
-    });
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      canvas.style.display = "none";
-      document.querySelectorAll(".orb").forEach((o) => o.style.animation = "none");
-    }
-
-    // Hero rotating verb: strike the current word, swap it, fade the next one in.
-    (function () {
-      const el = document.getElementById("heroRotate");
-      if (!el) return;
-      const wordEl = el.querySelector(".wr-word");
-      const strike = el.querySelector(".wr-strike");
-      if (!wordEl || !strike) return;
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const words = ["elevate", "grow", "improve", "scale", "fill", "level up", "retain"];
-      let i = 0;
-      const cycle = () => {
-        if (reduce) { i = (i + 1) % words.length; wordEl.textContent = words[i]; return; }
-        el.classList.add("striking");
-        setTimeout(() => {
-          el.classList.add("swapping");
-          setTimeout(() => {
-            i = (i + 1) % words.length;
-            wordEl.textContent = words[i];
-            strike.style.transition = "none";
-            el.classList.remove("striking");
-            requestAnimationFrame(() => {
-              strike.style.transition = "";
-              el.classList.remove("swapping");
-            });
-          }, 320);
-        }, 440);
-      };
-      setInterval(cycle, 2600);
-    })();
   })();
 </script>
 </body>
