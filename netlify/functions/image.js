@@ -1,13 +1,17 @@
 // /api/image - banner upload + serving.
-// Banners are enforced at exactly 1200x480, max 2MB, jpg/png/webp only.
+// Event banners are enforced at exactly 1200x480 (2.5:1). Ad banners (kind=ad)
+// are enforced at exactly 960x600 (16:10), matching the .ad-banner display
+// everywhere on the site so an uploaded banner is never cropped or distorted.
 // Dimensions are parsed from the file bytes server-side, so client checks
 // cannot be bypassed.
 
 import { json, requireUser, imagesStore, id, rateLimit } from "../lib/util.js";
 
 const MAX_BYTES = 2 * 1024 * 1024;
-const REQUIRED_W = 1200;
-const REQUIRED_H = 480;
+const SPECS = {
+  event: { w: 1200, h: 480 },
+  ad: { w: 960, h: 600 },
+};
 
 function sniff(buf) {
   // PNG
@@ -75,6 +79,9 @@ export default async (req) => {
     if (!user) return json({ error: "Log in first." }, 401);
     if (!(await rateLimit(`upload:${user.id}`, 15, 3600))) return json({ error: "Upload limit reached. Try again later." }, 429);
 
+    const kind = SPECS[url.searchParams.get("kind")] ? url.searchParams.get("kind") : "event";
+    const { w: REQUIRED_W, h: REQUIRED_H } = SPECS[kind];
+
     const buf = Buffer.from(await req.arrayBuffer());
     if (buf.length === 0) return json({ error: "Empty upload." }, 400);
     if (buf.length > MAX_BYTES) return json({ error: "Banner must be under 2MB." }, 413);
@@ -86,7 +93,7 @@ export default async (req) => {
     }
 
     const imgId = id();
-    await store.set(imgId, buf, { metadata: { type: info.type, by: user.id } });
+    await store.set(imgId, buf, { metadata: { type: info.type, by: user.id, kind } });
     return json({ ok: true, id: imgId, url: `/api/image?id=${imgId}` });
   }
 
