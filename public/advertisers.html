@@ -18,7 +18,7 @@
     <a href="/" class="back-home">&larr; Back to home</a>
     <span class="kicker">Advertising</span>
     <h1 style="font-size:clamp(2rem,4vw,3rem)">Reach the ER:LC community</h1>
-    <p style="margin-top:10px;max-width:620px">Clean banner placements cycled across Gatherly &mdash; the discovery feed, reports, and news. Twelve slots, full click and impression analytics, and every ad is human-reviewed before it runs.</p>
+    <p style="margin-top:10px;max-width:620px">Clean banner placements cycled across Gatherly, the discovery feed, reports, and news. Twelve slots, full click and impression analytics, and every ad is human-reviewed before it runs.</p>
     <div class="adv-stat" style="margin-top:22px">
       <div class="stat"><b id="statSlots">12</b><span>Placement slots site-wide</span></div>
       <div class="stat"><b>3&ndash;14d</b><span>Flexible booking lengths</span></div>
@@ -39,13 +39,15 @@
       <label class="field">Destination link <small>Where clicks go. Scanned by our watchdog.</small>
         <input id="adLink" class="input" maxlength="300" placeholder="https://discord.gg/yourserver">
       </label>
-      <label class="field">Banner image URL (optional) <small>Direct https image, ~16:10.</small>
-        <input id="adImage" class="input" maxlength="400" placeholder="https://&hellip;/banner.png">
-      </label>
+      <label class="field">Banner (optional) <small>Exactly 960x600px, under 2MB. JPG, PNG, or WebP. Matches the banner slots exactly so nothing gets cropped or stretched.</small></label>
+      <div class="dropzone" id="adDz" role="button" tabindex="0" aria-label="Upload ad banner">
+        <span id="adDzText">Drag a 960x600 banner here, or click to choose a file</span>
+        <input type="file" id="adDzInput" accept="image/jpeg,image/png,image/webp" hidden>
+      </div>
       <label class="field" style="margin-bottom:8px">Placement length</label>
       <div class="adv-price-grid" id="adPacks"></div>
       <button class="btn btn-primary" id="adBuy" style="width:100%">Continue to secure checkout</button>
-      <p class="note" style="margin-top:12px">By booking you agree to our <a href="/terms#consumer">advertising terms</a>. Payment does not guarantee placement &mdash; ads that breach our standards are denied and the unused portion refunded.</p>
+      <p class="note" style="margin-top:12px">By booking you agree to our <a href="/terms#consumer">advertising terms</a>. Payment does not guarantee placement - ads that breach our standards are denied and the unused portion refunded.</p>
       <div id="adMsg" style="margin-top:10px"></div>
     </div>
 
@@ -53,7 +55,7 @@
       <h3>Why Gatherly</h3>
       <ul class="plan" style="list-style:none;margin-top:10px">
         <li>Seen by ER:LC hosts and players actively browsing events</li>
-        <li>Rotated cleanly &mdash; never intrusive pop-ups</li>
+        <li>Rotated cleanly, never intrusive pop-ups</li>
         <li>Real analytics: impressions, clicks, unique visitors, CTR</li>
         <li>Human-reviewed &amp; watchdog-scanned for safety</li>
         <li>Cancel-and-refund protection under Australian Consumer Law</li>
