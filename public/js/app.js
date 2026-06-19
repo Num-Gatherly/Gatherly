@@ -78,9 +78,18 @@ function avatarUrl(user, size = 64) {
 
 function avatarMarkup(user, size = 28) {
   const url = avatarUrl(user, size * 2);
-  if (url) return `<img src="${esc(url)}" alt="" width="${size}" height="${size}" style="border-radius:50%;display:block;object-fit:cover" onerror="this.style.display='none'">`;
+  if (url) return `<img src="${esc(url)}" alt="" width="${size}" height="${size}" style="border-radius:50%;display:block;object-fit:cover" class="js-img-fallback">`;
   const letter = (user.username || "?")[0].toUpperCase();
   return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.42)}px;font-weight:700;color:#fff">${esc(letter)}</span>`;
+}
+
+// Inline onerror="" attributes are blocked by the site's CSP, so any image
+// that should hide itself on a broken load gets the .js-img-fallback class
+// and is wired up here instead, right after it lands in the DOM.
+function wireImgFallback(scope) {
+  (scope || document).querySelectorAll("img.js-img-fallback").forEach((img) => {
+    img.addEventListener("error", () => { img.style.display = "none"; }, { once: true });
+  });
 }
 
 function buildUserButton(el, user) {
@@ -92,6 +101,7 @@ function buildUserButton(el, user) {
       <span class="nav-user-name">${esc(user.username)}</span>
       <span class="nav-user-caret">&#9662;</span>
     </button>`;
+  wireImgFallback(wrap);
 
   // Live red notification count over Control room so staff stay on top of work.
   if (user.role) {
@@ -132,6 +142,7 @@ function buildUserButton(el, user) {
       <div class="ndd-sep"></div>
       <button id="dropdownLogout" class="ndd-item ndd-danger" type="button">Sign out</button>`;
     document.body.appendChild(dd);
+    wireImgFallback(dd);
     document.getElementById("dropdownLogout").onclick = async () => {
       try { await api("/api/auth?action=logout", { method: "POST" }); } catch {}
       location.href = "/";
@@ -185,11 +196,12 @@ export function renderNotifications() {
     const safeImg = n.image && /^https?:\/\//i.test(n.image) ? n.image : null;
     toast.innerHTML = `
       <button class="g-toast-x" aria-label="Dismiss" type="button">&times;</button>
-      ${safeImg ? `<img class="g-toast-img" src="${esc(safeImg)}" alt="" onerror="this.style.display='none'">` : ""}
+      ${safeImg ? `<img class="g-toast-img js-img-fallback" src="${esc(safeImg)}" alt="">` : ""}
       <div class="g-toast-title">${esc(n.title)}</div>
       ${n.body ? `<div class="g-toast-body">${esc(n.body)}</div>` : ""}
       ${n.link ? `<a class="g-toast-link" href="${esc(n.link)}">Open &rarr;</a>` : ""}`;
     document.body.appendChild(toast);
+    wireImgFallback(toast);
     requestAnimationFrame(() => toast.classList.add("in"));
     toast.querySelector(".g-toast-x").onclick = () => {
       toast.classList.remove("in");
@@ -284,7 +296,7 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
 
 function adBanner(a) {
   const href = a.tracked ? `/api/ads?action=click&id=${encodeURIComponent(a.id)}` : esc(a.link || "#");
-  const img = a.image ? `<img src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : "";
+  const img = a.image ? `<img src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" class="js-img-fallback">` : "";
   return `<a class="ad-banner ${a.tracked ? "" : "ad-house"}" href="${href}"${a.tracked ? ` rel="sponsored nofollow" target="_blank"` : ""}>
     ${img}<span class="ad-title">${esc(a.title || "")}</span>
     <span class="ad-cta">${a.tracked ? "Visit &rarr;" : "Learn more &rarr;"}</span>
@@ -315,6 +327,7 @@ export function renderAdSlots() {
       const show = () => {
         const a = pool[idx % pool.length]; idx++;
         slot.innerHTML = adBanner(a);
+        wireImgFallback(slot);
         if (a.tracked) trackImpression(a.id);
       };
       show();
