@@ -344,7 +344,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
   html { scroll-behavior: auto; }
 }
 /* ============================================================
-   GATHERLY V3 ADDITIONS — append to the end of style.css
+   GATHERLY V3 ADDITIONS - append to the end of style.css
    ============================================================ */
 
 .nav-login { background: #ffffff !important; color: #0a1020 !important; }
@@ -412,12 +412,12 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
 
 @keyframes radar-ping { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(2.5); } }
 
-.locked { position: relative; overflow: hidden; }
-.locked > .locked-inner { filter: blur(7px); pointer-events: none; user-select: none; opacity: .6; }
+.locked { position: relative; overflow: hidden; isolation: isolate; min-height: 220px; }
+.locked > .locked-inner { position: relative; z-index: 0; filter: blur(7px); pointer-events: none; user-select: none; opacity: .55; min-height: 100%; }
 .locked-overlay {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 12px; text-align: center; padding: 20px; z-index: 2;
-  background: radial-gradient(circle at center, rgba(9,13,19,0.35), rgba(9,13,19,0.7));
+  gap: 12px; text-align: center; padding: 20px; z-index: 5;
+  background: radial-gradient(circle at center, rgba(9,13,19,0.6), rgba(9,13,19,0.88));
 }
 .locked-overlay .lock-title { font-weight: 700; color: #fff; font-size: 1rem; }
 .locked-overlay .lock-sub { color: var(--muted); font-size: .85rem; max-width: 280px; }
@@ -459,7 +459,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
 .back-home:hover { color: var(--text); text-decoration: none; }
 
 /* ============================================================
-   REPORT V4 — sectioned analytics, heatmap, gating, upsell
+   REPORT V4 - sectioned analytics, heatmap, gating, upsell
    ============================================================ */
 .rep-section-head { margin: 34px 0 18px; }
 .rep-section-title {
@@ -468,9 +468,11 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
 }
 .rep-section-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(127,168,255,0.35), transparent); }
 .rep-section-sub { font-size: .85rem; margin-top: 6px; }
-.rep-grid { align-items: start; }
+.rep-grid { align-items: stretch; }
+.rep-grid .rep-box { height: 100%; display: flex; flex-direction: column; }
 .rep-box .rep-kick { font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
 .rep-box h3 { margin-bottom: 10px; }
+.rep-box .locked-inner { flex: 1; }
 
 /* best-time-to-host heatmap */
 .heatmap-7 { display: flex; flex-direction: column; gap: 4px; }
@@ -495,13 +497,12 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
 }
 .rep-upsell .rep-kick { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--signal); }
 
-/* gated boxes need to fill the grid row cleanly */
-.rep-box.locked { min-height: 220px; }
+/* gated boxes need to fill the grid row cleanly - min-height now lives on the base .locked rule */
 
 /* ============================================================
    CONTROL ROOM + ANNOUNCEMENT REFINEMENTS (Update 5)
    ============================================================ */
-/* Calmer announcement marker — keep the glass + blue tint, drop the pulsing "AI orb". */
+/* Calmer announcement marker, keep the glass + blue tint, drop the pulsing "AI orb". */
 .announce-dot {
   width: 7px; height: 7px; border-radius: 2px; transform: rotate(45deg);
   background: linear-gradient(135deg, #9cbcff, var(--signal));
@@ -534,7 +535,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
 .g-toast-img { width: 100%; max-height: 150px; object-fit: cover; border-radius: 10px; margin-bottom: 10px; }
 
 /* ============================================================
-   COMMUNITY REVIEW RAIL — tilted "glass laptop" screens (Update 3/12)
+   COMMUNITY REVIEW RAIL - tilted "glass laptop" screens (Update 3/12)
    ============================================================ */
 .laptop-rail-wrap {
   margin-top: 40px; padding: 30px 0 10px; overflow: hidden;
@@ -585,7 +586,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
 .ad-slot:empty { display: none; }
 .ad-slot--side { margin: 0 0 18px; }
 .ad-slot--side .ad-banner { flex-direction: column; align-items: flex-start; }
-.ad-slot--side .ad-banner img { width: 100%; height: 110px; }
+.ad-slot--side .ad-banner img { width: 100%; aspect-ratio: 16 / 10; height: auto; }
 .ad-slot--side .ad-cta { margin-left: 0; }
 .ad-rail { position: sticky; top: 96px; align-self: start; }
 .layout-rail { display: grid; grid-template-columns: 1fr 280px; gap: 32px; align-items: start; }
