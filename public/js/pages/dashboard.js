@@ -124,7 +124,7 @@ function renderReportHistory(events) {
         const r = e.lastReport;
         const score = r.score ?? 0;
         const scoreCol = score >= 70 ? "#69d99c" : score >= 45 ? "#7fa8ff" : "#ff7a7a";
-        return `<div class="card report-history-card" data-event-id="${esc(e.id)}" style="cursor:pointer;background:rgba(255,255,255,.03);border:1px solid rgba(148,170,205,.12);backdrop-filter:blur(8px);transition:border-color .2s,transform .2s" onmouseover="this.style.borderColor='rgba(127,168,255,.35)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='rgba(148,170,205,.12)';this.style.transform=''">
+        return `<div class="card report-history-card" data-event-id="${esc(e.id)}" style="cursor:pointer">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
             <div style="min-width:0">
               <div style="font-weight:600;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.title)}</div>
