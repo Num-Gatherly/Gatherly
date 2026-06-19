@@ -37,6 +37,21 @@
     .ticker-item { color: var(--muted); }
     .ticker-item b { color: var(--text); }
 
+    /* ---------- "Real sessions" cross-out + cycling word ---------- */
+    .cycle-word-wrap { display: inline-block; }
+    .cycle-word {
+      position: relative; display: inline-block; color: var(--text);
+      transition: opacity .32s ease, transform .32s ease;
+    }
+    .cycle-word::after {
+      content: ""; position: absolute; left: -4%; right: -4%; top: 53%; height: 2px;
+      background: var(--signal); transform: scaleX(0); transform-origin: left;
+      transition: transform .4s cubic-bezier(.65,0,.35,1);
+    }
+    .cycle-word.struck::after { transform: scaleX(1); }
+    .cycle-word.swap-out { opacity: 0; transform: translateY(-8px); }
+    @media (prefers-reduced-motion: reduce) { .cycle-word, .cycle-word::after { transition: none; } }
+
     /* ---------- section header (used sparingly, not on every section) ---------- */
     .sect-head { max-width: 600px; margin-bottom: 38px; }
     .sect-head h2 { font-size: clamp(1.8rem, 3.4vw, 2.6rem); }
@@ -115,7 +130,7 @@
   <div class="wrap hero-grid">
     <div>
       <span class="hero-pulse"><b id="liveCount">-</b><span id="pulseLabel">events live right now</span></span>
-      <h1 id="heroHeadline">Fill every session.<br>Then <span class="accent">prove it worked.</span></h1>
+      <h1 id="heroHeadline"><span id="heroHeadlineMain">Fill every session.<br>Then </span><span class="accent" id="heroHeadlineAccent">prove it worked.</span></h1>
       <p class="lede" id="heroSub">List your ER:LC event, reach players who are already looking, and get a verified report the moment it ends.</p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="/advertise">Advertise your event</a>
@@ -139,7 +154,7 @@
 <section class="section">
   <div class="wrap">
     <div class="sect-head reveal"><span class="sect-tag">From the community</span>
-      <h2>Real servers. Real sessions.</h2>
+      <h2>Real servers. Real <span class="cycle-word-wrap"><span class="cycle-word" id="cycleWord">sessions</span></span>.</h2>
       <p>Hosts across the Australian ER:LC scene use Gatherly to fill events and prove what worked.</p>
     </div>
     <div class="spotlight reveal" id="spotlightHost"></div>
