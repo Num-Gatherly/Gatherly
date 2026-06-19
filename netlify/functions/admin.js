@@ -441,7 +441,8 @@ async function handler(req) {
     if (!isExec(user)) return json({ error: "Executive only." }, 403);
     const b = await req.json().catch(() => ({}));
     const current = (await miscStore().get("siteContent", { type: "json" })) || {};
-    if (typeof b.heroHeadline === "string") current.heroHeadline = clampStr(b.heroHeadline, 120);
+    if (typeof b.heroHeadlineMain === "string") current.heroHeadlineMain = clampStr(b.heroHeadlineMain, 120);
+    if (typeof b.heroHeadlineAccent === "string") current.heroHeadlineAccent = clampStr(b.heroHeadlineAccent, 60);
     if (typeof b.heroSub === "string") current.heroSub = clampStr(b.heroSub, 200);
     await miscStore().setJSON("siteContent", current);
     await audit(user, "site.content-update", {});
