@@ -2,7 +2,7 @@ import { boot, api, esc } from "/js/app.js";
 boot("/");
 
 /* ==========================================================================
-   HOME RADAR — homepage-only, separate from the shared renderRadar() in
+   HOME RADAR - homepage-only, separate from the shared renderRadar() in
    app.js (which dashboard.js and reports.js also use, so it's left alone).
    Two blip types instead of one:
      - signal/live blips: live or upcoming events, click -> /events#id
@@ -81,10 +81,10 @@ api("/api/events?action=recent").then((d) => {
 
 // ---- ER:LC community review rail (tilted "glass laptop" screens, slow drift) ----
 const REVIEWS = [
-  { img: "https://i.postimg.cc/50GXcTbS/Untitled-design-27.webp", server: "New South Wales Roleplay", quote: "Gatherly filled our Friday patrol in minutes — the post-event report is the first thing our command team reads now." },
+  { img: "https://i.postimg.cc/50GXcTbS/Untitled-design-27.webp", server: "New South Wales Roleplay", quote: "Gatherly filled our Friday patrol in minutes, the post-event report is the first thing our command team reads now." },
   { img: "https://i.postimg.cc/dQLNcx8t/image3.webp", server: "Port Macquarie Roleplay", quote: "The health score and funnel showed us exactly where players were dropping off. Our retention is up every single week." },
   { img: "https://i.postimg.cc/jdf8Ln3x/image-4.webp", server: "Australia Roleplay", quote: "Best-time-to-host heatmap alone paid for Ultra. We moved our sessions and peak attendance jumped." },
-  { img: "https://i.postimg.cc/kgFfy3ds/image5.webp", server: "Liberty County Patrol", quote: "Verified ER:LC numbers we can actually show staff — no more guessing how an event went." },
+  { img: "https://i.postimg.cc/kgFfy3ds/image5.webp", server: "Liberty County Patrol", quote: "Verified ER:LC numbers we can actually show staff, no more guessing how an event went." },
   { img: "https://i.postimg.cc/MG6tPP67/image-3.webp", server: "Highway Patrol Division", quote: "Staff intelligence caught our quiet shifts. Response times are sharper than ever." },
   { img: "https://i.postimg.cc/C1d7YRnX/image-2.webp", server: "Metro Emergency RP", quote: "The AI summary reads like a proper debrief. Our hosts love it." },
   { img: "https://i.postimg.cc/tTf5g9hX/image-1.webp", server: "Coastal Roleplay", quote: "Predictive forecasting nailed our next session within five players. Genuinely impressive." },
@@ -130,7 +130,7 @@ api("/api/events?action=pulse").then((d) => {
   if (!grid) return;
   const blips = (d.blips || []).filter((b) => b.live).slice(0, 6);
   const items = blips.length ? blips : (d.blips || []).slice(0, 6);
-  if (!items.length) { grid.innerHTML = `<p class="note" style="grid-column:1/-1">No live events this moment — <a href="/advertise">be the first to list one</a>.</p>`; return; }
+  if (!items.length) { grid.innerHTML = `<p class="note" style="grid-column:1/-1">No live events this moment, <a href="/advertise">be the first to list one</a>.</p>`; return; }
   grid.innerHTML = items.map((b) => `
     <a class="card live-event-card reveal in" href="/events${b.id ? "#" + esc(b.id) : ""}">
       <div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -152,9 +152,37 @@ document.querySelectorAll(".faq-item").forEach((item) => {
   });
 });
 
+// ---- "Real sessions" cross-out + cycling word ----
+(function cycleHeroWord() {
+  const el = document.getElementById("cycleWord");
+  if (!el) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const WORDS = ["sessions", "growth", "retention", "turnout", "engagement", "momentum"];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let i = 0;
+
+  (async () => {
+    while (document.body.contains(el)) {
+      await sleep(1900);
+      el.classList.add("struck");
+      await sleep(450);
+      el.classList.add("swap-out");
+      await sleep(320);
+      i = (i + 1) % WORDS.length;
+      el.textContent = WORDS[i];
+      el.classList.remove("struck");
+      // double rAF so the browser registers a fresh transition start for the fade-in
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      el.classList.remove("swap-out");
+    }
+  })();
+})();
+
 // admin-editable content blocks
 fetch("/api/admin?action=content").then((r) => r.ok ? r.json() : null).then((d) => {
   if (!d || !d.content) return;
-  if (d.content.heroHeadline) document.getElementById("heroHeadline").textContent = d.content.heroHeadline;
+  if (d.content.heroHeadlineMain) document.getElementById("heroHeadlineMain").textContent = d.content.heroHeadlineMain;
+  if (d.content.heroHeadlineAccent) document.getElementById("heroHeadlineAccent").textContent = d.content.heroHeadlineAccent;
   if (d.content.heroSub) document.getElementById("heroSub").textContent = d.content.heroSub;
 }).catch(() => {});
