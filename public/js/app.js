@@ -86,7 +86,7 @@ function avatarMarkup(user, size = 28) {
 // Inline onerror="" attributes are blocked by the site's CSP, so any image
 // that should hide itself on a broken load gets the .js-img-fallback class
 // and is wired up here instead, right after it lands in the DOM.
-function wireImgFallback(scope) {
+export function wireImgFallback(scope) {
   (scope || document).querySelectorAll("img.js-img-fallback").forEach((img) => {
     img.addEventListener("error", () => { img.style.display = "none"; }, { once: true });
   });
