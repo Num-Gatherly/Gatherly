@@ -52,7 +52,7 @@
         <p style="font-size:.85rem;margin-bottom:10px">Some tabs below (Ads, News, Users, Events, Announcements, Notifications, Executive) only show for <b>Executive</b> staff. Your account is currently <b>Admin</b>. If you have the executive setup code, enter it here to upgrade this account.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <input id="execClaimCode" class="input" placeholder="Executive setup code" style="flex:1;min-width:180px">
-          <button class="btn btn-primary btn-sm" onclick="claimExec()">Unlock executive access</button>
+          <button class="btn btn-primary btn-sm" data-action="claim-exec">Unlock executive access</button>
         </div>
         <div id="execClaimMsg" style="margin-top:10px"></div>
       </div>
@@ -138,7 +138,7 @@
           <label class="field">Duration (minutes, leave blank for permanent)
             <input id="announceDuration" class="input" type="number" min="1" placeholder="e.g. 60">
           </label>
-          <button class="btn btn-primary btn-sm" onclick="addAnnounce()">Add announcement</button>
+          <button class="btn btn-primary btn-sm" data-action="add-announce">Add announcement</button>
           <div id="announceMsg" style="margin-top:10px"></div>
         </div>
       </div>
@@ -168,7 +168,7 @@
       <label class="field">Duration (minutes, leave blank for permanent)
         <input id="notifyDuration" class="input" type="number" min="1" placeholder="e.g. 60">
       </label>
-      <button class="btn btn-primary btn-sm" onclick="addNotification()">Send to all users</button>
+      <button class="btn btn-primary btn-sm" data-action="add-notification">Send to all users</button>
       <div id="notifyMsg" style="margin-top:10px"></div>
     </div>
   </div>
@@ -192,7 +192,7 @@
           <label class="field">Advertiser weight <small>How often each paid ad appears.</small>
             <input id="adAdvWeight" class="input" type="number" min="1" max="20" placeholder="1">
           </label>
-          <button class="btn btn-primary btn-sm" onclick="saveAdConfig()">Save rotation</button>
+          <button class="btn btn-primary btn-sm" data-action="save-ad-config">Save rotation</button>
           <p class="note" style="margin-top:10px">Default 4:1 means Gatherly's own messages get ~80% of impressions while paid ads fill the rest. Adjust freely.</p>
           <div id="adCfgMsg" style="margin-top:10px"></div>
         </div>
@@ -235,8 +235,8 @@
             <span>Enabled (in rotation)</span>
           </label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="saveHouseAd()">Save house ad</button>
-            <button class="btn btn-ghost btn-sm" onclick="clearHouseAd()">Clear / new</button>
+            <button class="btn btn-primary btn-sm" data-action="save-house-ad">Save house ad</button>
+            <button class="btn btn-ghost btn-sm" data-action="clear-house-ad">Clear / new</button>
           </div>
           <div id="houseAdMsg" style="margin-top:10px"></div>
         </div>
@@ -250,8 +250,8 @@
       <div>
         <h3 style="margin-bottom:14px">All articles</h3>
         <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" onclick="newArticle()">New article</button>
-          <button class="btn btn-ghost btn-sm" onclick="loadNews()">Refresh</button>
+          <button class="btn btn-primary btn-sm" data-action="new-article">New article</button>
+          <button class="btn btn-ghost btn-sm" data-action="refresh-news">Refresh</button>
         </div>
         <div id="newsList"><p style="color:var(--muted)">Loading&hellip;</p></div>
       </div>
@@ -309,9 +309,9 @@
             <span>Publish (visible on /news)</span>
           </label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="saveNews()">Save</button>
-            <button class="btn btn-ghost btn-sm" onclick="newArticle()">Clear / new</button>
-            <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" onclick="deleteNews()">Delete</button>
+            <button class="btn btn-primary btn-sm" data-action="save-news">Save</button>
+            <button class="btn btn-ghost btn-sm" data-action="new-article">Clear / new</button>
+            <button class="btn btn-sm" style="background:var(--bad,#ff7a7a);color:#fff" data-action="delete-news">Delete</button>
           </div>
           <div id="newsMsg" style="margin-top:10px"></div>
         </div>
@@ -326,7 +326,7 @@
         <h3 style="margin-bottom:14px">Admin access codes</h3>
         <div class="card" style="margin-bottom:14px">
           <p style="font-size:.85rem;margin-bottom:10px">Generate a single-use <b>admin</b> code. Codes are stored hashed (never in plaintext) and <b>expire 30 minutes</b> after generation. There is no executive code - executives are assigned directly from the Users tab.</p>
-          <button class="btn btn-ghost btn-sm" onclick="genCode()">Generate admin code</button>
+          <button class="btn btn-ghost btn-sm" data-action="gen-code">Generate admin code</button>
           <div id="execMsg" style="margin-top:10px"></div>
         </div>
         <div id="codeList"></div>
@@ -340,7 +340,7 @@
           <label class="field">Hero subheading
             <input id="heroSub" class="input" maxlength="200" placeholder="ER:LC event advertising&hellip;">
           </label>
-          <button class="btn btn-primary btn-sm" onclick="saveContent()">Save content</button>
+          <button class="btn btn-primary btn-sm" data-action="save-content">Save content</button>
         </div>
       </div>
     </div>
