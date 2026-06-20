@@ -96,9 +96,19 @@ export async function sendLiveNotify(ev, host) {
       method: "POST",
       body: JSON.stringify(liveNotifyPayload(ev, host)),
     });
-    if (!r.ok) return { ok: false, reason: `discord-${r.status}` };
+    if (!r.ok) {
+      // Discord puts the actual cause (bad permissions, malformed component,
+      // unknown channel, etc) in the response body, not just the status code.
+      let detail = "";
+      try { detail = await r.text(); } catch {}
+      console.log(`[liveNotify] Discord rejected the message for event ${ev.id}: status ${r.status}, body: ${detail.slice(0, 500)}`);
+      return { ok: false, reason: `discord-${r.status}`, detail: detail.slice(0, 500) };
+    }
     return { ok: true };
-  } catch { return { ok: false, reason: "network-error" }; }
+  } catch (e) {
+    console.log(`[liveNotify] network error sending for event ${ev.id}: ${e?.message || e}`);
+    return { ok: false, reason: "network-error", detail: e?.message || String(e) };
+  }
 }
 
 export async function hostFor(ev) {
