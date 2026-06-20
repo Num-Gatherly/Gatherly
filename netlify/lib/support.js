@@ -1,8 +1,18 @@
 // Shared support helpers used by /api/tickets and /api/interactions.
+//
+// Rewritten on Components V2 (the rounded "container" cards). Classic embed
+// description strings like "### Title" only ever rendered as literal
+// hashes in DMs and the staff channel, because embed descriptions are not
+// a full markdown surface, V2 Text Display components are. This file now
+// builds every support message the same way the DM broadcast system does.
 import {
-  ticketsStore, usersStore, BRAND, discordBotFetch, dmUserEmbed,
+  ticketsStore, usersStore, BRAND, discordBotFetch,
   isStaff, effectivePlan, planName,
 } from "./util.js";
+import {
+  text, separator, container, actionRow, actionButton, linkButton,
+  GATHERLY_EMOJI_TAG, V2_FLAG,
+} from "./broadcast.js";
 
 export const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID || "1515235842292187246";
 export const SUPPORT_PING_ROLE_ID = process.env.SUPPORT_PING_ROLE_ID || "1514879974643990698";
@@ -43,113 +53,107 @@ export function appendMessage(t, from, text) {
   return t;
 }
 
-/* ------------------------------- embeds --------------------------------- */
+/* ------------------------------- V2 cards -------------------------------- */
+// Staff-facing ticket card, posted in the support channel. Same V2 shape as
+// the DM cards below so the heading and quote-block markdown actually
+// renders instead of showing as literal "#" characters.
 export function channelEmbed(t) {
   const color = t.status === "closed" ? 0x9aa4b2 : t.escalated ? BRAND.yellow : t.assignedTo ? BRAND.green : BRAND.red;
-  const statusText = t.status === "closed" ? "Closed" : t.escalated ? "Escalated - high urgency" : t.assignedTo ? `Claimed by ${t.assignedToName}` : "Open, unclaimed";
+  const statusText = t.status === "closed" ? "Closed" : t.escalated ? "Escalated, high urgency" : t.assignedTo ? `Claimed by ${t.assignedToName}` : "Open, unclaimed";
   const first = (t.messages?.find((m) => m.from === "user")?.text || "").slice(0, 1000);
-  return {
-    title: "Gatherly Support",
-    color,
-    description: [
+  const blocks = [
+    text(`${GATHERLY_EMOJI_TAG} **Gatherly Support**`),
+    text([
       `### ${t.subject}`,
       `> ${first || "No message provided."}`,
-      "",
+    ].join("\n")),
+    separator(),
+    text([
       `**Topic:** ${t.topic}`,
       `**Plan:** ${planName(t.plan || "free")}`,
       `**Status:** ${statusText}`,
       `**Ticket:** \`${t.id}\``,
-    ].join("\n"),
-    timestamp: new Date().toISOString(),
-    footer: { text: "Gatherly Support" },
-  };
+    ].join("\n")),
+  ];
+  return container(blocks, color);
 }
 
 export function channelComponents(t) {
   if (t.status === "closed") return [];
-  return [{
-    type: 1,
-    components: [
-      { type: 2, style: 3, label: "Claim",    custom_id: `tkt:claim:${t.id}` },
-      { type: 2, style: 2, label: "Unclaim",  custom_id: `tkt:unclaim:${t.id}` },
-      { type: 2, style: 4, label: "Close",    custom_id: `tkt:close:${t.id}` },
-      { type: 2, style: 1, label: "Escalate", custom_id: `tkt:esc:${t.id}` },
-    ],
-  }];
+  return [actionRow([
+    actionButton("Claim", `tkt:claim:${t.id}`, 3),
+    actionButton("Unclaim", `tkt:unclaim:${t.id}`, 2),
+    actionButton("Close", `tkt:close:${t.id}`, 4),
+    actionButton("Escalate", `tkt:esc:${t.id}`, 1),
+  ])];
 }
 
 export function dmComponents(t) {
-  return [{
-    type: 1,
-    components: [
-      { type: 2, style: 1, label: "Reply",    custom_id: `tkt:reply:${t.id}` },
-      { type: 2, style: 4, label: "Escalate", custom_id: `tkt:esc:${t.id}` },
-    ],
-  }];
+  return [actionRow([
+    actionButton("Reply", `tkt:reply:${t.id}`, 1),
+    actionButton("Escalate", `tkt:esc:${t.id}`, 4),
+  ])];
 }
 
-/* -------------------- user-facing DM embeds -------------------- */
+/* -------------------- user-facing DM cards -------------------- */
 export function dmOpenedPayload(t) {
+  const blocks = [
+    text(`${GATHERLY_EMOJI_TAG} **Gatherly Support**`),
+    text([
+      "> Thanks for reaching out. Our team has your request and will respond here.",
+    ].join("\n")),
+    separator(),
+    text([
+      "### Your inquiry",
+      `> ${t.subject}`,
+    ].join("\n")),
+    separator(),
+    text([
+      "**What happens next**",
+      "> A member of our team will reply to this DM shortly.",
+      "> Please be patient and avoid sending repeated messages.",
+      "> Use the buttons below to add a reply or flag this as high urgency.",
+    ].join("\n")),
+  ];
   return {
-    embeds: [{
-      title: "# Gatherly Support",
-      color: BRAND.color,
-      description: [
-        "> Thanks for reaching out. Our team has your request and will respond here.",
-        "",
-        "### Your inquiry",
-        `> ${t.subject}`,
-        "",
-        "**What happens next**",
-        "> A member of our team will reply to this DM shortly.",
-        "> Please be patient and avoid sending repeated messages.",
-        "> Use the buttons below to add a reply or flag this as high urgency.",
-      ].join("\n"),
-      footer: { text: "Gatherly Support" },
-      timestamp: new Date().toISOString(),
-    }],
-    components: dmComponents(t),
+    flags: V2_FLAG,
+    components: [container(blocks, BRAND.color), ...dmComponents(t)],
   };
 }
 
-export function dmStaffReplyPayload(text) {
+export function dmStaffReplyPayload(text_) {
+  const blocks = [
+    text(`${GATHERLY_EMOJI_TAG} **Reply from Gatherly Support**`),
+    text(`> ${String(text_).slice(0, 1500)}`),
+    separator(),
+    text([
+      "**Options**",
+      "> Tap **Reply** below to respond to this message.",
+      "> Please be patient and avoid sending repeated messages.",
+    ].join("\n")),
+  ];
   return {
-    embeds: [{
-      title: "# Reply from Gatherly Support",
-      color: BRAND.color,
-      description: [
-        `> ${String(text).slice(0, 1500)}`,
-        "",
-        "**Options**",
-        "> Tap **Reply** below to respond to this message.",
-        "> Please be patient and avoid sending repeated messages.",
-      ].join("\n"),
-      footer: { text: "Gatherly Support" },
-      timestamp: new Date().toISOString(),
-    }],
-    components: [{
-      type: 1,
-      components: [
-        { type: 2, style: 1, label: "Reply", custom_id: `tkt:reply:placeholder` },
-      ],
-    }],
+    flags: V2_FLAG,
+    components: [
+      container(blocks, BRAND.color),
+      actionRow([actionButton("Reply", "tkt:reply:placeholder", 1)]),
+    ],
   };
 }
 
 export function dmResolvedPayload() {
+  const blocks = [
+    text(`${GATHERLY_EMOJI_TAG} **Request Resolved**`),
+    text("> A member of our team has resolved your request."),
+    separator(),
+    text([
+      "**Thank you for reaching out to Gatherly.**",
+      "> You are welcome to open a new request any time from the Gatherly website.",
+    ].join("\n")),
+  ];
   return {
-    embeds: [{
-      title: "# Request Resolved",
-      color: BRAND.green,
-      description: [
-        "> A member of our team has resolved your request.",
-        "",
-        "**Thank you for reaching out to Gatherly.**",
-        "> You are welcome to open a new request any time from the Gatherly website.",
-      ].join("\n"),
-      footer: { text: "Gatherly Support" },
-      timestamp: new Date().toISOString(),
-    }],
+    flags: V2_FLAG,
+    components: [container(blocks, BRAND.green)],
   };
 }
 
@@ -159,40 +163,32 @@ export function reportDmPayload(ev, report, eventId) {
   const scoreEmoji = report.score >= 70 ? "🟢" : report.score >= 45 ? "🟡" : "🔴";
   const reportUrl = `${SITE_URL}/reports?event=${eventId}`;
 
+  const blocks = [
+    text(`${GATHERLY_EMOJI_TAG} **Report Ready: ${ev.title}**`),
+    text([
+      `### ${report.serverName}`,
+      `> ${report.aiSummary ? report.aiSummary.slice(0, 600) : "Your event has been analysed by Gatherly."}`,
+    ].join("\n")),
+    separator(),
+    text([
+      "**Event Summary**",
+      `> ${scoreEmoji} **Health score:** ${report.score}/100`,
+      `> **Players joined:** ${report.uniquePlayers}`,
+      `> **Peak in-server:** ${report.peakConcurrent}/${report.maxPlayers}`,
+      `> **Retained 30 min:** ${report.retained30}`,
+      `> **Avg session:** ${report.avgSessionMin} min`,
+      report.momentum ? `> **Momentum:** ${report.momentum.direction === "up" ? "📈" : "📉"} ${report.momentum.changePct}% vs last event` : "",
+    ].filter((l) => l !== "").join("\n")),
+    separator(),
+    text("-# Full analytics, charts, and staff data are available on your report page."),
+  ];
+
   return {
-    embeds: [{
-      title: `# Report Ready: ${ev.title}`,
-      color: scoreColor,
-      description: [
-        `### ${report.serverName}`,
-        `> ${report.aiSummary ? report.aiSummary.slice(0, 600) : "Your event has been analysed by Gatherly."}`,
-        "",
-        "**Event Summary**",
-        `> ${scoreEmoji} **Health score:** ${report.score}/100`,
-        `> **Players joined:** ${report.uniquePlayers}`,
-        `> **Peak in-server:** ${report.peakConcurrent}/${report.maxPlayers}`,
-        `> **Retained 30 min:** ${report.retained30}`,
-        `> **Avg session:** ${report.avgSessionMin} min`,
-        "",
-        report.momentum
-          ? `**Momentum:** ${report.momentum.direction === "up" ? "📈" : "📉"} ${report.momentum.changePct}% vs last event`
-          : "",
-        "",
-        "*Full analytics, charts, and staff data are available on your report page.*",
-      ].filter((l) => l !== "").join("\n"),
-      footer: { text: "Gatherly Analytics" },
-      timestamp: new Date().toISOString(),
-    }],
-    components: [{
-      type: 1,
-      components: [{
-        type: 2,
-        style: 5,
-        label: "View Full Report",
-        url: reportUrl,
-        emoji: { name: "📊" },
-      }],
-    }],
+    flags: V2_FLAG,
+    components: [
+      container(blocks, scoreColor),
+      actionRow([linkButton("View Full Report", reportUrl, { emoji: { name: "📊" } })]),
+    ],
   };
 }
 
@@ -203,10 +199,10 @@ export async function sendChannelCard(t) {
     const r = await discordBotFetch(`/channels/${SUPPORT_CHANNEL_ID}/messages`, {
       method: "POST",
       body: JSON.stringify({
-        content: SUPPORT_PING_ROLE_ID ? `<@&${SUPPORT_PING_ROLE_ID}> — a new support ticket needs attention.` : undefined,
+        content: SUPPORT_PING_ROLE_ID ? `<@&${SUPPORT_PING_ROLE_ID}> - a new support ticket needs attention.` : undefined,
         allowed_mentions: { roles: SUPPORT_PING_ROLE_ID ? [SUPPORT_PING_ROLE_ID] : [] },
-        embeds: [channelEmbed(t)],
-        components: channelComponents(t),
+        flags: V2_FLAG,
+        components: [channelEmbed(t), ...channelComponents(t)],
       }),
     });
     if (!r.ok) return { ok: false };
@@ -220,7 +216,7 @@ export async function refreshChannelCard(t) {
   try {
     const r = await discordBotFetch(`/channels/${t.channelId}/messages/${t.channelMessageId}`, {
       method: "PATCH",
-      body: JSON.stringify({ embeds: [channelEmbed(t)], components: channelComponents(t) }),
+      body: JSON.stringify({ flags: V2_FLAG, components: [channelEmbed(t), ...channelComponents(t)] }),
     });
     return r.ok;
   } catch { return false; }
@@ -229,15 +225,12 @@ export async function refreshChannelCard(t) {
 export async function postChannelNote(t, line) {
   if (!process.env.DISCORD_BOT_TOKEN) return false;
   try {
+    const blocks = [text(`### Ticket \`${t.id}\``), text(line)];
     const r = await discordBotFetch(`/channels/${t.channelId || SUPPORT_CHANNEL_ID}/messages`, {
       method: "POST",
       body: JSON.stringify({
-        embeds: [{
-          color: t.escalated ? BRAND.yellow : BRAND.color,
-          description: `### Ticket \`${t.id}\`\n${line}`,
-          footer: { text: "Gatherly Support" },
-          timestamp: new Date().toISOString(),
-        }],
+        flags: V2_FLAG,
+        components: [container(blocks, t.escalated ? BRAND.yellow : BRAND.color)],
       }),
     });
     return r.ok;
@@ -268,8 +261,10 @@ export async function dmStaffReply(t, text) {
     if (!ch.ok) return { ok: false };
     const { id: channelId } = await ch.json();
     const payload = dmStaffReplyPayload(text);
-    if (payload.components?.[0]?.components?.[0]) {
-      payload.components[0].components[0].custom_id = `tkt:reply:${t.id}`;
+    // The Reply button sits in the second top-level component (the action
+    // row appended after the container), index 1.
+    if (payload.components?.[1]?.components?.[0]) {
+      payload.components[1].components[0].custom_id = `tkt:reply:${t.id}`;
     }
     const r = await discordBotFetch(`/channels/${channelId}/messages`, {
       method: "POST", body: JSON.stringify(payload),
