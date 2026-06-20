@@ -196,13 +196,15 @@ export function reportDmPayload(ev, report, eventId) {
 export async function sendChannelCard(t) {
   if (!process.env.DISCORD_BOT_TOKEN) return { ok: false };
   try {
+    // Components V2 rejects the legacy top-level `content` field outright,
+    // so the staff ping has to be its own Text Display component instead.
+    const pingBlock = SUPPORT_PING_ROLE_ID ? [text(`<@&${SUPPORT_PING_ROLE_ID}> - a new support ticket needs attention.`)] : [];
     const r = await discordBotFetch(`/channels/${SUPPORT_CHANNEL_ID}/messages`, {
       method: "POST",
       body: JSON.stringify({
-        content: SUPPORT_PING_ROLE_ID ? `<@&${SUPPORT_PING_ROLE_ID}> - a new support ticket needs attention.` : undefined,
         allowed_mentions: { roles: SUPPORT_PING_ROLE_ID ? [SUPPORT_PING_ROLE_ID] : [] },
         flags: V2_FLAG,
-        components: [channelEmbed(t), ...channelComponents(t)],
+        components: [...pingBlock, channelEmbed(t), ...channelComponents(t)],
       }),
     });
     if (!r.ok) return { ok: false };
