@@ -1,6 +1,8 @@
 // /api/broadcast - Discord DM broadcast system.
 //
 // action=unsubscribe   GET,  public, no login (signed token from the DM link)
+// action=resubscribe   GET,  public, no login (signed token from the DM link)
+// action=notifications GET/POST, logged-in, manage your own DM preference
 // action=test          POST, executive only, DMs the caller-supplied Discord ID
 // action=send          POST, executive only, DMs every connected, subscribed user
 // action=runs          GET,  executive only, recent broadcast history
@@ -40,6 +42,25 @@ async function handler(req) {
     if (!ok) return unsubPage("We could not find that account. It may have been deleted.", false);
     await audit(null, "broadcast.resubscribe", { targetId: userId });
     return unsubPage("You are resubscribed to Gatherly product update DMs.", true);
+  }
+
+  /* --------------- logged-in: notification preference toggle -------------- */
+  // Same dmNotifications.unsubscribed flag as the token links above, just
+  // reachable from Settings while already signed in, no token needed.
+  if (action === "notifications" && req.method === "GET") {
+    const self = await requireUser(req);
+    if (!self) return json({ error: "Log in first." }, 401);
+    return json({ unsubscribed: isUnsubscribed(self) });
+  }
+
+  if (action === "notifications" && req.method === "POST") {
+    const self = await requireUser(req);
+    if (!self) return json({ error: "Log in first." }, 401);
+    const b = await req.json().catch(() => ({}));
+    const ok = await setUnsubscribed(self.id, Boolean(b.unsubscribed));
+    if (!ok) return json({ error: "Could not update your notification preference." }, 500);
+    await audit(self, b.unsubscribed ? "broadcast.unsubscribe-self" : "broadcast.resubscribe-self", {});
+    return json({ ok: true, unsubscribed: Boolean(b.unsubscribed) });
   }
 
   /* ------------------------------ staff gate ------------------------------ */
