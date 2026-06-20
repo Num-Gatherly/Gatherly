@@ -118,7 +118,12 @@ async function route(event) {
       await audit({ id: userId, username: user.username }, "billing.credits-purchase", { add, newTotal: credits });
       // Fire-and-forget: a Discord hiccup here should never fail or retry
       // the whole Stripe webhook, the purchase itself is already saved.
-      sendCreditsThanks(user, add).catch(() => {});
+      sendCreditsThanks(user, add, {
+        amountCents: obj.amount_total ?? null,
+        currency: obj.currency || null,
+        method: "Stripe card",
+        newState: `${credits} boost credit${credits === 1 ? "" : "s"} available`,
+      }).catch(() => {});
       return;
     }
 
@@ -134,16 +139,25 @@ async function route(event) {
       subStatus: "active", credits: grant, creditsPeriod: monthKey(), planSetAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
 
+    let finalExpiresAt = null;
+    let lifetime = false;
     if (cycle === "lifetime") {
+      lifetime = true;
       await uStore().setJSON(userId, { ...base, lifetime: true, planExpiresAt: null });
     } else {
       let expiresAt = null;
       if (obj.subscription) { const sub = await stripeGet(`subscriptions/${obj.subscription}`); expiresAt = expiryFromUnix(sub?.current_period_end); }
-      await uStore().setJSON(userId, { ...base, lifetime: false, planExpiresAt: expiresAt || expiryFromCycle(cycle) });
+      finalExpiresAt = expiresAt || expiryFromCycle(cycle);
+      await uStore().setJSON(userId, { ...base, lifetime: false, planExpiresAt: finalExpiresAt });
     }
     await audit({ id: userId, username: user.username }, "billing.activate", { plan, cycle });
     // Fire-and-forget, same reasoning as the credits branch above.
-    sendPlanThanks(user, planName(plan)).catch(() => {});
+    sendPlanThanks(user, planName(plan), {
+      amountCents: obj.amount_total ?? null,
+      currency: obj.currency || null,
+      method: "Stripe card",
+      newState: lifetime ? "Lifetime access" : `Active until ${new Date(finalExpiresAt).toLocaleDateString("en-AU", { dateStyle: "medium" })}`,
+    }).catch(() => {});
     return;
   }
 
