@@ -9,8 +9,9 @@
 //   STRIPE_CURRENCY            (optional, default "usd")
 //   ROBUX_GAMEPASS_ULTRA       (Ultra-only monthly gamepass id)
 import {
-  json, requireUser, usersStore, normalizePlan, PLAN_INFO, audit, guard, monthKey,
+  json, requireUser, usersStore, normalizePlan, PLAN_INFO, planName, audit, guard, monthKey,
 } from "../lib/util.js";
+import { sendPlanThanks } from "../lib/purchaseThanks.js";
 
 const STRIPE_PRICE_ENV = {
   pro:   { monthly: "STRIPE_PRICE_PRO_MONTHLY",   annual: "STRIPE_PRICE_PRO_ANNUAL",   lifetime: "STRIPE_PRICE_PRO_LIFETIME" },
@@ -147,12 +148,15 @@ async function handler(req) {
 
     // Robux is manual and not recurring, so we grant 30 days; re-verify to extend.
     const expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
-    await usersStore().setJSON(user.id, {
+    const updated = {
       ...user, robloxId, plan: "ultra", planVia: "robux", planCycle: "monthly", subStatus: "active",
       planVerifiedAt: new Date().toISOString(), planExpiresAt: expiresAt,
       credits: PLAN_INFO.ultra.monthlyCredits, creditsPeriod: monthKey(),
-    });
+    };
+    await usersStore().setJSON(user.id, updated);
     await audit(user, "billing.robux-ultra", { robloxId });
+    // Fire-and-forget, same reasoning as the Stripe paths in webhook.js.
+    sendPlanThanks(updated, planName("ultra")).catch(() => {});
     return json({ ok: true, plan: "ultra" });
   }
 
