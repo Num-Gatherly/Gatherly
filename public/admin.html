@@ -71,6 +71,7 @@
     <button class="cr-tab exec-only" data-tab="events">Events</button>
     <button class="cr-tab exec-only" data-tab="announcements">Announcements</button>
     <button class="cr-tab exec-only" data-tab="notifications">Notifications</button>
+    <button class="cr-tab exec-only" data-tab="broadcast">Broadcast</button>
     <button class="cr-tab exec-only" data-tab="executive">Executive</button>
     <button class="cr-tab" data-tab="audit">Audit log</button>
   </nav>
@@ -170,6 +171,64 @@
       </label>
       <button class="btn btn-primary btn-sm" data-action="add-notification">Send to all users</button>
       <div id="notifyMsg" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- BROADCAST (Discord DM blast) -->
+  <div class="cr-panel exec-only" data-panel="broadcast">
+    <div class="split-panel">
+      <div>
+        <div class="card">
+          <h3 style="margin-bottom:6px">Discord DM broadcast</h3>
+          <p style="margin-bottom:14px;color:var(--muted)">Sends a Components V2 DM card to every Gatherly user who has linked their Discord account. Test it on yourself first, this cannot be recalled once sent.</p>
+
+          <label class="field">Title
+            <input id="bcastTitle" class="input" maxlength="256" placeholder="V5.8 Update &amp; New Bundles">
+          </label>
+          <label class="field">Body
+            <textarea id="bcastBody" class="input" maxlength="3500" rows="4" placeholder="Describe what changed&hellip;"></textarea>
+          </label>
+          <label class="field">Image URL (optional)
+            <input id="bcastImage" class="input" maxlength="400" placeholder="https://&hellip;/image.png">
+          </label>
+
+          <div class="split-panel" style="gap:12px">
+            <label class="field">Change log button text <small>Leave blank to hide the button.</small>
+              <input id="bcastChangeLogText" class="input" maxlength="80" placeholder="View Full Change Log">
+            </label>
+            <label class="field">Change log button link
+              <input id="bcastChangeLogUrl" class="input" maxlength="400" placeholder="https://&hellip;/news/v5-8">
+            </label>
+          </div>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+            <button class="btn btn-secondary btn-sm" data-action="preview-broadcast">Preview</button>
+          </div>
+          <div id="bcastPreview" style="margin-top:14px"></div>
+        </div>
+
+        <div class="card" style="margin-top:18px">
+          <h3 style="margin-bottom:6px">Test send</h3>
+          <p style="margin-bottom:14px;color:var(--muted)">DM this exact card to a single Discord user ID first, usually your own, to check it renders correctly before going wide.</p>
+          <label class="field">Your Discord user ID
+            <input id="bcastTestId" class="input" maxlength="32" placeholder="e.g. 482910283746102934">
+          </label>
+          <button class="btn btn-secondary btn-sm" data-action="test-broadcast">Send test DM to me</button>
+          <div id="bcastTestMsg" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card" style="margin-top:18px;border-color:rgba(255,122,122,.35)">
+          <h3 style="margin-bottom:6px;color:#ff7a7a">Send to everyone</h3>
+          <p style="margin-bottom:14px;color:var(--muted)">This DMs <strong id="bcastAudienceCount">every connected user</strong>. There is no undo. Test it first.</p>
+          <button class="btn btn-danger btn-sm" data-action="send-broadcast">Notify every Gatherly member</button>
+          <div id="bcastSendMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom:14px">Broadcast history</h3>
+        <div id="bcastRuns"><p style="color:var(--muted)">Loading&hellip;</p></div>
+      </div>
     </div>
   </div>
 
