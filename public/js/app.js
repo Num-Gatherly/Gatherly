@@ -3,6 +3,19 @@
 export const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// Scenario dropdown values (advertise.html) -> display label. Older listings
+// created before this list existed may still have free-text scenario values
+// (e.g. "Storm scenario"), those just pass through unchanged below.
+const SCENARIO_LABELS = {
+  "border-patrol": "Border Patrol",
+  "pursuit": "Pursuit",
+  "court-trial": "Court Trial",
+  "weather-hazard": "Weather Hazard",
+  "department-tryout": "Department Tryout",
+  "miscellaneous-event": "Miscellaneous Event",
+};
+export const scenarioLabel = (s) => SCENARIO_LABELS[s] || s || "";
+
 export async function api(path, opts = {}) {
   const r = await fetch(path, {
     headers: opts.body instanceof Blob || opts.body instanceof ArrayBuffer ? {} : { "Content-Type": "application/json" },
