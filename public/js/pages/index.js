@@ -141,6 +141,41 @@ api("/api/events?action=pulse").then((d) => {
     </a>`).join("");
 }).catch(() => {});
 
+// ---- Public heatmap teaser - same action=heatmap data dashboard.js uses,
+// just unlocked and lighter, since this is platform-wide marketing content
+// rather than a single host's private analytics. ----
+api("/api/events?action=heatmap").then((d) => {
+  const wrap = document.getElementById("homeHeatmapWrap");
+  if (!wrap) return;
+  const { grid, reportedCount } = d;
+  const flat = grid.flat().filter((v) => v != null);
+  if (!flat.length || reportedCount < 3) {
+    wrap.innerHTML = `<p class="note">The platform heatmap lights up as more events report in. Check back soon, or <a href="/advertise">list the first one</a>.</p>`;
+    return;
+  }
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const max = Math.max(...flat, 1);
+  wrap.innerHTML = `
+    <div style="overflow-x:auto">
+      <div style="display:grid;grid-template-columns:36px repeat(24,1fr);gap:3px;min-width:560px;align-items:center">
+        <div></div>${hours.map((h) => h % 3 === 0 ? `<div style="font-size:.58rem;color:var(--faint);text-align:center;grid-column:span 1">${String(h).padStart(2, "0")}</div>` : `<div></div>`).join("")}
+        ${grid.map((row, d) => `<div style="font-size:.7rem;color:var(--muted);font-weight:500">${days[d]}</div>${row.map((v) => {
+          const intensity = v != null ? (0.12 + 0.88 * v / max) : 0;
+          const bg = v != null ? `rgba(127,168,255,${intensity.toFixed(2)})` : "rgba(148,170,205,0.05)";
+          return `<div style="aspect-ratio:1;border-radius:3px;background:${bg}"></div>`;
+        }).join("")}`).join("")}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:.78rem;color:var(--muted)">
+      <span>Quieter</span><div style="display:flex;gap:2px">${[0.1,0.25,0.45,0.65,0.85,1].map((v) => `<div style="width:13px;height:13px;border-radius:3px;background:rgba(127,168,255,${v})"></div>`).join("")}</div><span>Busier</span>
+      <span style="margin-left:auto;color:var(--faint)">UTC &middot; platform-wide</span>
+    </div>`;
+}).catch(() => {
+  const wrap = document.getElementById("homeHeatmapWrap");
+  if (wrap) wrap.innerHTML = `<p class="note">Heatmap unavailable right now.</p>`;
+});
+
 // ---- FAQ accordion ----
 document.querySelectorAll(".faq-item").forEach((item) => {
   const q = item.querySelector(".faq-q");
