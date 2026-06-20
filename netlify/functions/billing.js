@@ -9,9 +9,9 @@
 //   STRIPE_CURRENCY            (optional, default "usd")
 //   ROBUX_GAMEPASS_ULTRA       (Ultra-only monthly gamepass id)
 import {
-  json, requireUser, usersStore, normalizePlan, PLAN_INFO, planName, audit, guard, monthKey,
+  json, requireUser, usersStore, normalizePlan, PLAN_INFO, planName, isExec, audit, guard, monthKey,
 } from "../lib/util.js";
-import { sendPlanThanks } from "../lib/purchaseThanks.js";
+import { sendPlanThanks, sendCreditsThanks } from "../lib/purchaseThanks.js";
 
 const STRIPE_PRICE_ENV = {
   pro:   { monthly: "STRIPE_PRICE_PRO_MONTHLY",   annual: "STRIPE_PRICE_PRO_ANNUAL",   lifetime: "STRIPE_PRICE_PRO_LIFETIME" },
@@ -59,6 +59,36 @@ async function handler(req) {
 
   const user = await requireUser(req);
   if (!user) return json({ error: "Log in first to subscribe." }, 401);
+
+  // ---- Exec-only: send yourself a test purchase thank-you DM ----
+  // Hits the exact same sendPlanThanks/sendCreditsThanks functions the real
+  // webhook and Robux paths call, just targeted at the caller's own Discord
+  // account instead of triggered by an actual payment, so the card design
+  // can be checked without spending real money or buying Robux.
+  if (action === "test-purchase-thanks" && req.method === "POST") {
+    if (!isExec(user)) return json({ error: "Executive only." }, 403);
+    const blocked = await guard(req, user, `test-thanks:${user.id}`, 10, 600, { kind: "billing", what: "Repeated test purchase-thanks sends." });
+    if (blocked) return blocked;
+    if (!user.discordId) return json({ error: "Your account has no linked Discord ID." }, 400);
+
+    const b = await req.json().catch(() => ({}));
+    const kind = b.kind === "credits" ? "credits" : "plan";
+    const r = kind === "credits"
+      ? await sendCreditsThanks(user, Math.max(1, parseInt(b.credits, 10) || 6), {
+          amountCents: CREDIT_PACKS[Math.max(1, parseInt(b.credits, 10) || 6)]?.amount ?? 699,
+          currency: CURRENCY,
+          method: "Stripe card (test)",
+          newState: `${user.credits ?? 0} boost credits available`,
+        })
+      : await sendPlanThanks(user, planName(normalizePlan(b.plan) === "free" ? "ultra" : normalizePlan(b.plan)), {
+          amountCents: 1499,
+          currency: CURRENCY,
+          method: "Stripe card (test)",
+          newState: "Active until (test data)",
+        });
+    if (!r.ok) return json({ error: `Could not send the test DM (${r.reason}). Check DISCORD_BOT_TOKEN and that you share a server with the bot and allow DMs.` }, 400);
+    return json({ ok: true });
+  }
 
   // ---- Subscription / lifetime checkout ----
   if (action === "checkout" && req.method === "POST") {
@@ -155,8 +185,14 @@ async function handler(req) {
     };
     await usersStore().setJSON(user.id, updated);
     await audit(user, "billing.robux-ultra", { robloxId });
-    // Fire-and-forget, same reasoning as the Stripe paths in webhook.js.
-    sendPlanThanks(updated, planName("ultra")).catch(() => {});
+    // Fire-and-forget, same reasoning as the Stripe paths in webhook.js. No
+    // Robux amount is available here (the gamepass price lives on Roblox's
+    // side, not something this endpoint queries), so the receipt just shows
+    // the payment method without inventing a figure.
+    sendPlanThanks(updated, planName("ultra"), {
+      method: "Robux gamepass",
+      newState: `Active until ${new Date(expiresAt).toLocaleDateString("en-AU", { dateStyle: "medium" })}`,
+    }).catch(() => {});
     return json({ ok: true, plan: "ultra" });
   }
 
