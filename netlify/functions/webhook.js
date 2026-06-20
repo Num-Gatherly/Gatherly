@@ -12,8 +12,9 @@
 // Env vars: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 import {
   json, usersStore, miscStore, audit, verifyStripeSignature,
-  normalizePlan, PLAN_INFO, monthKey, adsStore, postStaffEvent, brandEmbed,
+  normalizePlan, PLAN_INFO, planName, monthKey, adsStore, postStaffEvent, brandEmbed,
 } from "../lib/util.js";
+import { sendPlanThanks, sendCreditsThanks } from "../lib/purchaseThanks.js";
 
 async function fetchT(url, opts = {}, ms = 10000) { return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) }); }
 
@@ -115,6 +116,9 @@ async function route(event) {
       const credits = (user.credits ?? 0) + add;
       await uStore().setJSON(userId, { ...user, credits, stripeCustomerId: customerId || user.stripeCustomerId, updatedAt: new Date().toISOString() });
       await audit({ id: userId, username: user.username }, "billing.credits-purchase", { add, newTotal: credits });
+      // Fire-and-forget: a Discord hiccup here should never fail or retry
+      // the whole Stripe webhook, the purchase itself is already saved.
+      sendCreditsThanks(user, add).catch(() => {});
       return;
     }
 
@@ -138,6 +142,8 @@ async function route(event) {
       await uStore().setJSON(userId, { ...base, lifetime: false, planExpiresAt: expiresAt || expiryFromCycle(cycle) });
     }
     await audit({ id: userId, username: user.username }, "billing.activate", { plan, cycle });
+    // Fire-and-forget, same reasoning as the credits branch above.
+    sendPlanThanks(user, planName(plan)).catch(() => {});
     return;
   }
 
