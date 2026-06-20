@@ -72,11 +72,19 @@ export function liveNotifyPayload(ev, host) {
   const buttons = [];
   if (joinable) buttons.push(linkButton("Quick Join", ev.joinCode.trim(), { emoji: { name: "🚓" } }));
 
+  // Components V2 messages reject the legacy top-level `content` field
+  // outright (error MESSAGE_CANNOT_USE_LEGACY_FIELDS_WITH_COMPONENTS_V2), so
+  // the role ping has to live inside the component tree as its own Text
+  // Display instead, with allowed_mentions still controlling who actually
+  // gets pinged.
   return {
-    content: `<@&${role}>`,
     allowed_mentions: { roles: [role] },
     flags: V2_FLAG,
-    components: buttons.length ? [card, actionRow(buttons)] : [card],
+    components: [
+      text(`<@&${role}>`),
+      card,
+      ...(buttons.length ? [actionRow(buttons)] : []),
+    ],
   };
 }
 
