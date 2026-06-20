@@ -36,6 +36,7 @@ export const auditStore = () => getStore("audit");
 export const codesStore = () => getStore("adminCodes");
 export const adsStore = () => getStore("ads");
 export const newsStore = () => getStore("news");
+export const roleRequestsStore = () => getStore("roleRequests");
 
 /* =========================================================================
    SECRETS / SESSION
