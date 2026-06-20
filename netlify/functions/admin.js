@@ -11,6 +11,9 @@ import {
   addGuildRole, removeGuildRole, monthKey, id, postStaffEvent, brandEmbed,
   hashCode, codeFingerprint, CODE_TTL_MS,
 } from "../lib/util.js";
+import { requestSetRole, requestCodeRedemption } from "../lib/roleApproval.js";
+import { sendLiveNotify } from "../lib/liveNotify.js";
+import { upsertStatusMessage } from "../lib/statusPage.js";
 
 export default async (req) => {
   try { return await handler(req); }
@@ -51,13 +54,12 @@ async function handler(req) {
       return json({ error: "That code is not valid, has expired, or has been revoked." }, 403);
     }
     const grant = rec.role === "executive" ? "executive" : "admin";
-    await usersStore().setJSON(user.id, { ...user, role: grant, updatedAt: new Date().toISOString() });
-    rec.redemptions = rec.redemptions || [];
-    rec.redemptions.push({ userId: user.id, username: user.username, at: new Date().toISOString() });
-    rec.lastRedeemedAt = new Date().toISOString();
-    await store.setJSON(hashCode(codeStr), rec);
-    await audit({ ...user, role: grant }, "code.redeem-success", { fingerprint: rec.fingerprint, granted: grant });
-    return json({ ok: true, role: grant });
+    // Role changes are gated behind a DM approval step now, redemption
+    // creates a pending request and notifies the approver, it does not
+    // touch the user's role or mark the code redeemed until accepted.
+    const reqRec = await requestCodeRedemption(user, rec, codeStr);
+    await audit(user, "code.redeem-pending", { fingerprint: rec.fingerprint, requestedRole: grant, requestId: reqRec.id });
+    return json({ ok: true, pending: true, role: grant });
   }
 
   if (action === "claim-exec" && req.method === "POST") {
@@ -234,9 +236,12 @@ async function handler(req) {
     const target = await uStore.get(b.userId, { type: "json" });
     if (!target) return json({ error: "User not found." }, 404);
     if (![null, "admin", "executive"].includes(b.role)) return json({ error: "Invalid role." }, 400);
-    await uStore.setJSON(b.userId, { ...target, role: b.role || null, updatedAt: new Date().toISOString() });
-    await audit(user, "user.set-role", { targetId: b.userId, targetUsername: target.username, role: b.role });
-    return json({ ok: true });
+    // Every grant AND every removal goes through DM approval now, nothing
+    // here mutates the target's role directly, the interaction handler
+    // does that once accepted.
+    const reqRec = await requestSetRole(target, b.role || null, user);
+    await audit(user, "user.set-role-pending", { targetId: b.userId, targetUsername: target.username, role: b.role, requestId: reqRec.id });
+    return json({ ok: true, pending: true });
   }
 
   if (action === "suspend" && req.method === "POST") {
@@ -392,6 +397,62 @@ async function handler(req) {
     await miscStore().setJSON("siteContent", content);
     await audit(user, "notify.remove", { id: b.id });
     return json({ ok: true, notifications: content.notifications });
+  }
+
+  /* --------------------------- TEST TRIGGERS ------------------------------ */
+  // Exec-only buttons in the Control Room's Tests tab, fire the real
+  // Discord-sending code paths on demand without waiting for a real event
+  // to go live or the per-minute scheduler to run.
+  if (action === "test-live-card" && req.method === "POST") {
+    if (!isExec(user)) return json({ error: "Executive only." }, 403);
+    const blocked = await guard(req, user, `test-live:${user.id}`, 10, 600, { kind: "billing", what: "Repeated test live-card sends." });
+    if (blocked) return blocked;
+    const sampleEvent = {
+      id: `test-${id().slice(0, 8)}`,
+      title: "Test Event Card",
+      scenario: "pursuit",
+      description: "This is a preview sent from the Control Room Tests tab, not a real listing.",
+      joinCode: "https://www.roblox.com/games/start?placeId=0&launchData=test",
+      boosted: true,
+    };
+    const r = await sendLiveNotify(sampleEvent, user);
+    if (!r.ok) return json({ error: `Could not send the test card (${r.reason}). Check DISCORD_BOT_TOKEN and LIVE_NOTIFY_CHANNEL_ID.` }, 400);
+    return json({ ok: true });
+  }
+
+  if (action === "test-status-refresh" && req.method === "POST") {
+    if (!isExec(user)) return json({ error: "Executive only." }, 403);
+    const blocked = await guard(req, user, `test-status:${user.id}`, 10, 600, { kind: "billing", what: "Repeated test status refreshes." });
+    if (blocked) return blocked;
+    try {
+      await upsertStatusMessage();
+      return json({ ok: true });
+    } catch (e) {
+      return json({ error: `Could not refresh the status message (${e?.message || "unknown error"}).` }, 400);
+    }
+  }
+
+  /* ------------------ PURCHASE THANK-YOU MESSAGE CONTENT ------------------ */
+  if (action === "purchase-thanks-content") {
+    const content = (await miscStore().get("purchaseThanksContent", { type: "json" })) || {};
+    return json({ content });
+  }
+
+  if (action === "purchase-thanks-content-save" && req.method === "POST") {
+    if (!isExec(user)) return json({ error: "Executive only." }, 403);
+    const b = await req.json().catch(() => ({}));
+    const content = {
+      benefitsPhrasePlan: clampStr(b.benefitsPhrasePlan, 200) || undefined,
+      benefitsPhraseCredits: clampStr(b.benefitsPhraseCredits, 200) || undefined,
+      footerBannerUrl: clampStr(b.footerBannerUrl, 400) || undefined,
+      receiptFooterNote: clampStr(b.receiptFooterNote, 300) || undefined,
+    };
+    // Strip undefined keys so unset fields fall back to the library's
+    // built-in defaults rather than being saved as "undefined".
+    Object.keys(content).forEach((k) => content[k] === undefined && delete content[k]);
+    await miscStore().setJSON("purchaseThanksContent", content);
+    await audit(user, "purchase-thanks.content-save", {});
+    return json({ ok: true, content });
   }
 
   /* ------------------------- HOUSE ADS (Gatherly/ASB) --------------------- */
