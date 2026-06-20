@@ -1,4 +1,4 @@
-import { boot, api, esc, fmtLocal, tickCountdowns } from "/js/app.js";
+import { boot, api, esc, scenarioLabel, fmtLocal, tickCountdowns } from "/js/app.js";
 boot("/events");
 
 const $ = (id) => document.getElementById(id);
@@ -19,7 +19,7 @@ function card(e) {
       </div>
     </div>
     <div class="event-body">
-      <span class="badge">${esc(e.scenario)}</span>
+      <span class="badge">${esc(scenarioLabel(e.scenario))}</span>
       <h3>${esc(e.title)}</h3>
       ${e.description ? `<p style="font-size:.88rem">${esc(e.description)}</p>` : ""}
       <div class="event-meta">
