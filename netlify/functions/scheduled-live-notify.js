@@ -56,6 +56,7 @@ export default async () => {
       const r = await sendLiveNotify(ev, host);
       ev.liveNotifiedAt = new Date().toISOString();
       ev.liveNotifyOk = r.ok;
+      if (r.ok && r.messageId) ev.liveCardMessageId = r.messageId;
       if (!r.ok) { ev.liveNotifyFailReason = r.reason; ev.liveNotifyFailDetail = r.detail || null; }
       await store.setJSON(ev.id, ev);
       console.log(`[liveNotify] event ${ev.id} send result: ok=${r.ok}${r.ok ? "" : `, reason=${r.reason}, detail=${r.detail || "n/a"}`}`);
