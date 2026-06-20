@@ -72,6 +72,7 @@
     <button class="cr-tab exec-only" data-tab="announcements">Announcements</button>
     <button class="cr-tab exec-only" data-tab="notifications">Notifications</button>
     <button class="cr-tab exec-only" data-tab="broadcast">Broadcast</button>
+    <button class="cr-tab exec-only" data-tab="tests">Tests</button>
     <button class="cr-tab exec-only" data-tab="executive">Executive</button>
     <button class="cr-tab" data-tab="audit">Audit log</button>
   </nav>
@@ -232,6 +233,66 @@
     </div>
   </div>
 
+  <!-- TESTS -->
+  <div class="cr-panel exec-only" data-panel="tests">
+    <div class="split-panel">
+      <div>
+        <div class="card">
+          <h3 style="margin-bottom:6px">Test purchase thank-you</h3>
+          <p style="margin-bottom:14px;color:var(--muted)">Sends the real purchase thank-you DM, the receipt DM, and the supporters-channel announcement, the same flow fired by the Stripe webhook and Robux verification, without needing an actual payment.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <label class="field" style="flex:1;min-width:160px">Type
+              <select id="thanksTestKind" class="input">
+                <option value="plan">Plan purchase (Gatherly Ultra)</option>
+                <option value="credits">Credit pack</option>
+              </select>
+            </label>
+            <label class="field" id="thanksTestCreditsWrap" style="flex:1;min-width:120px" hidden>Credits
+              <input id="thanksTestCredits" class="input" type="number" min="1" value="6">
+            </label>
+            <button class="btn btn-secondary btn-sm" data-action="test-purchase-thanks">Send to myself</button>
+          </div>
+          <div id="thanksTestMsg" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card" style="margin-top:18px">
+          <h3 style="margin-bottom:6px">Test live-event card</h3>
+          <p style="margin-bottom:14px;color:var(--muted)">Posts a sample live-event card to the live-notify channel using your own account as the host, so the live player count reflects your real ER:LC key if one is saved in Settings.</p>
+          <button class="btn btn-secondary btn-sm" data-action="test-live-card">Post test card</button>
+          <div id="liveCardTestMsg" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card" style="margin-top:18px">
+          <h3 style="margin-bottom:6px">Force status message refresh</h3>
+          <p style="margin-bottom:14px;color:var(--muted)">Manually runs the same check-and-edit cycle the per-minute scheduler runs, useful to confirm the status message updates correctly without waiting up to a minute.</p>
+          <button class="btn btn-secondary btn-sm" data-action="test-status-refresh">Refresh now</button>
+          <div id="statusTestMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom:14px">Purchase thank-you message content</h3>
+        <div class="card">
+          <p style="margin-bottom:14px;color:var(--muted)">Edits the wording used in the thank-you DM, the channel announcement, and the receipt. Leave a field blank to fall back to the built-in default.</p>
+          <label class="field">Benefits phrase (plan purchases) <small>Shown after the bolded item name, before the pricing link.</small>
+            <textarea id="thanksBenefitsPlan" class="input" maxlength="200" rows="2" placeholder="We trust you are going to enjoy the benefits that can be found"></textarea>
+          </label>
+          <label class="field">Benefits phrase (credit purchases)
+            <textarea id="thanksBenefitsCredits" class="input" maxlength="200" rows="2" placeholder="You can spend them boosting your next listing, full pricing details"></textarea>
+          </label>
+          <label class="field">Footer banner image URL
+            <input id="thanksFooterBanner" class="input" maxlength="400" placeholder="https://&hellip;/image.webp">
+          </label>
+          <label class="field">Receipt footer note
+            <textarea id="thanksReceiptFooter" class="input" maxlength="300" rows="2" placeholder="Keep this for your records. Questions about a charge? Reach support from the Gatherly website."></textarea>
+          </label>
+          <button class="btn btn-primary btn-sm" data-action="save-thanks-content">Save</button>
+          <div id="thanksContentMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ADS -->
   <div class="cr-panel exec-only" data-panel="ads">
     <div class="split-panel">
@@ -384,7 +445,7 @@
       <div>
         <h3 style="margin-bottom:14px">Admin access codes</h3>
         <div class="card" style="margin-bottom:14px">
-          <p style="font-size:.85rem;margin-bottom:10px">Generate a single-use <b>admin</b> code. Codes are stored hashed (never in plaintext) and <b>expire 30 minutes</b> after generation. There is no executive code - executives are assigned directly from the Users tab.</p>
+          <p style="font-size:.85rem;margin-bottom:10px">Generate a single-use <b>admin</b> code. Codes are stored hashed (never in plaintext) and <b>expire 30 minutes</b> after generation. There is no executive code - executives are assigned directly from the Users tab. Every redemption now requires DM approval before the role is actually granted, the code itself isn't consumed until accepted.</p>
           <button class="btn btn-ghost btn-sm" data-action="gen-code">Generate admin code</button>
           <div id="execMsg" style="margin-top:10px"></div>
         </div>
