@@ -58,6 +58,7 @@ function switchTab(tab) {
   if (tab === "events") loadEvents();
   if (tab === "announcements") loadAnnouncements();
   if (tab === "notifications") { /* form only */ }
+  if (tab === "broadcast") loadBroadcastRuns();
   if (tab === "executive" && me.role === "executive") loadExec();
   if (tab === "audit") loadAudit();
 }
@@ -376,8 +377,7 @@ function renderTickets(tickets) {
         </div>
         <span style="font-size:.78rem;color:${statusColor};white-space:nowrap">${statusLabel}</span>
       </div>
-    </div>`;
-  }).join("");
+    </div>`; }).join("");
   host.querySelectorAll(".ticket-row").forEach((row) => {
     row.addEventListener("click", () => openTicket(row.dataset.id, tickets.find((t) => t.id === row.dataset.id)));
   });
@@ -752,6 +752,94 @@ async function addNotification() {
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
 
+/* ========================== BROADCAST (Discord DM blast) ========================== */
+function broadcastFormInput() {
+  return {
+    title: $("bcastTitle")?.value?.trim() || "",
+    body: $("bcastBody")?.value?.trim() || "",
+    image: $("bcastImage")?.value?.trim() || "",
+    changeLogText: $("bcastChangeLogText")?.value?.trim() || "",
+    changeLogUrl: $("bcastChangeLogUrl")?.value?.trim() || "",
+  };
+}
+
+function previewBroadcast() {
+  const f = broadcastFormInput();
+  const host = $("bcastPreview");
+  if (!host) return;
+  if (!f.title) { host.innerHTML = `<div class="alert alert-err">Enter a title to preview.</div>`; return; }
+  const hasChangeLog = f.changeLogUrl && /^https?:\/\//i.test(f.changeLogUrl);
+  host.innerHTML = `
+    <div style="border-left:3px solid #7fa8ff;border-radius:10px;background:rgba(127,168,255,.06);padding:14px 16px">
+      <div style="font-weight:700;margin-bottom:6px">🟦 ${esc(f.title)}</div>
+      ${f.body ? `<div style="color:var(--muted);white-space:pre-wrap;margin-bottom:10px">${esc(f.body)}</div>` : ""}
+      ${f.image ? `<img src="${esc(f.image)}" class="js-img-fallback" style="max-width:100%;border-radius:8px;margin-bottom:10px">` : ""}
+      <hr style="border-color:rgba(255,255,255,.08);margin:10px 0">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">© Gatherly ${new Date().getFullYear()} | ER:LC Events &amp; Analytics</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${hasChangeLog ? `<span class="btn btn-secondary btn-sm" style="pointer-events:none">${esc(f.changeLogText || "View Full Change Log")} ↗</span>` : ""}
+        <span class="btn btn-secondary btn-sm" style="pointer-events:none">Unsubscribe from Product Updates ↗</span>
+      </div>
+    </div>`;
+  wireImgFallback(host);
+}
+
+async function testBroadcast() {
+  const f = broadcastFormInput();
+  const testDiscordId = $("bcastTestId")?.value?.trim();
+  const msg = $("bcastTestMsg");
+  if (!f.title) { if (msg) msg.innerHTML = `<div class="alert alert-err">Title is required.</div>`; return; }
+  if (!testDiscordId) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter your Discord user ID first.</div>`; return; }
+  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Sending test DM&hellip;</div>`;
+  try {
+    await api("/api/broadcast?action=test", { method: "POST", body: { ...f, testDiscordId } });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Test DM sent. Check your Discord DMs.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
+
+async function sendBroadcast() {
+  const f = broadcastFormInput();
+  const msg = $("bcastSendMsg");
+  if (!f.title) { if (msg) msg.innerHTML = `<div class="alert alert-err">Title is required.</div>`; return; }
+
+  // First confirmation: plain.
+  if (!confirm("Send this Discord DM to every Gatherly member with a linked account? Test it on yourself first if you have not already.")) return;
+  // Second confirmation: deliberately scarier, per the danger of mass-DMing the whole user base.
+  const phrase = prompt('This cannot be undone once sent. Type "NOTIFY EVERYONE" exactly to confirm you want to notify every Gatherly member:');
+  if (phrase !== "NOTIFY EVERYONE") {
+    if (msg) msg.innerHTML = `<div class="alert alert-err">Cancelled, the confirmation phrase did not match.</div>`;
+    return;
+  }
+
+  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Sending to every connected user, this may take a moment&hellip;</div>`;
+  try {
+    const d = await api("/api/broadcast?action=send", { method: "POST", body: { ...f, confirm: true } });
+    const r = d.run;
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Sent to ${r.sent} of ${r.total} users (${r.skipped} unsubscribed, ${r.failed} failed).</div>`;
+    loadBroadcastRuns();
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
+
+async function loadBroadcastRuns() {
+  const host = $("bcastRuns");
+  if (!host) return;
+  host.innerHTML = `<p style="color:var(--muted)">Loading&hellip;</p>`;
+  try {
+    const d = await api("/api/broadcast?action=runs");
+    const audienceEl = $("bcastAudienceCount");
+    if (audienceEl) audienceEl.textContent = `every connected user (${d.connectedCount - d.unsubscribedCount} of ${d.connectedCount}, ${d.unsubscribedCount} unsubscribed)`;
+    if (!d.runs.length) { host.innerHTML = `<p style="color:var(--muted)">No broadcasts sent yet.</p>`; return; }
+    host.innerHTML = d.runs.map((r) => `
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <strong>${esc(r.title)}</strong>
+          <span style="color:var(--muted);font-size:13px">${new Date(r.at).toLocaleString()}</span>
+        </div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px">by ${esc(r.by)} · sent ${r.sent}/${r.total} · ${r.skipped} unsubscribed · ${r.failed} failed</div>
+      </div>`).join("");
+  } catch (e) { host.innerHTML = `<p style="color:var(--bad,#ff7a7a)">${esc(e.message)}</p>`; }
+}
+
 /* ========================== EXECUTIVE ========================== */
 async function claimExec() {
   const code = $("execClaimCode")?.value?.trim();
@@ -848,6 +936,10 @@ const ACTION_LABELS = {
   "announce.remove": "Removed an announcement",
   "notify.add": "Sent a notification",
   "notify.remove": "Removed a notification",
+  "broadcast.send": "Sent a Discord DM broadcast",
+  "broadcast.test": "Sent a Discord DM broadcast test",
+  "broadcast.unsubscribe": "A user unsubscribed from DM broadcasts",
+  "broadcast.resubscribe": "A user resubscribed to DM broadcasts",
   "user.set-plan": "Changed a user's plan",
   "user.set-role": "Changed a user's staff role",
   "user.set-listing-cap": "Changed a user's listing cap",
@@ -970,6 +1062,9 @@ const ACTIONS = {
   "add-announce": () => addAnnounce(),
   "remove-announce": (el) => removeAnnounce(el.dataset.id),
   "add-notification": () => addNotification(),
+  "preview-broadcast": () => previewBroadcast(),
+  "test-broadcast": () => testBroadcast(),
+  "send-broadcast": () => sendBroadcast(),
   "save-ad-config": () => saveAdConfig(),
   "approve-ad": (el) => approveAd(el.dataset.id),
   "deny-ad": (el) => denyAd(el.dataset.id),
@@ -1015,3 +1110,4 @@ document.addEventListener("click", (e) => {
 });
 
 init();
+    
