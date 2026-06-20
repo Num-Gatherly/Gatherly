@@ -1,4 +1,4 @@
-import { boot, api, esc, fmtLocal, renderRadar, currentUser, planLabel, planRank } from "/js/app.js";
+import { boot, api, esc, scenarioLabel, fmtLocal, renderRadar, currentUser, planLabel, planRank } from "/js/app.js";
 import { renderReport } from "/js/report.js";
 boot("/dashboard");
 
@@ -57,7 +57,7 @@ async function loadEvents() {
   $("myEvents").innerHTML = allEvents.length ? `
     <table class="tbl"><thead><tr><th>Event</th><th>Starts</th><th>Len</th><th>Views</th><th>Status</th><th></th></tr></thead><tbody>
     ${allEvents.map((e) => `<tr>
-      <td><b>${esc(e.title)}</b><br><span style="color:var(--muted);font-size:.8rem">${esc(e.scenario)} &middot; code ${esc(e.joinCode)}</span></td>
+      <td><b>${esc(e.title)}</b><br><span style="color:var(--muted);font-size:.8rem">${esc(scenarioLabel(e.scenario))} &middot; code ${esc(e.joinCode)}</span></td>
       <td>${fmtLocal(e.startsAt)}</td><td>${e.durationMin}m</td><td>${e.views}</td>
       <td>${e.live ? `<span class="badge badge-live">Live</span>` : e.ended ? `<span class="badge">Ended</span>` : `<span class="badge badge-boost">Upcoming</span>`}</td>
       <td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap">
