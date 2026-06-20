@@ -2,14 +2,15 @@
 //
 // This is what makes the DM two-way: the bot's DM has a Reply button that opens a
 // text box (modal); the submitted text is relayed back to staff here. It also powers
-// the Claim / Unclaim / Close / Escalate buttons on the support-channel card.
+// the Claim / Unclaim / Close / Escalate buttons on the support-channel card, and the
+// self-service "Unsubscribe" role-removal button on the live-event Discord card.
 //
 // SETUP (one time): in the Discord Developer Portal -> your app -> General Information,
 // copy the Public Key into a Netlify env var DISCORD_PUBLIC_KEY. Then under that app,
 // set "Interactions Endpoint URL" to https://gatherly-events.netlify.app/api/interactions
 // (Discord will send a test PING which this handler answers).
 import crypto from "node:crypto";
-import { json } from "../lib/util.js";
+import { json, removeGuildRole } from "../lib/util.js";
 import {
   getTicket, saveTicket, appendMessage, refreshChannelCard, postChannelNote,
   dmResolved, discordUserIsStaff,
@@ -63,7 +64,25 @@ const actorDiscordId = (i) => i.member?.user?.id || i.user?.id || null;
 const inGuild = (i) => Boolean(i.member); // channel context = staff; DM = opener
 
 async function onComponent(i) {
-  const { kind, ticketId } = parseId(i.data?.custom_id);
+  const customId = i.data?.custom_id || "";
+
+  // ----- live-event card: self-service scenario role removal -----
+  // custom_id shape: role:remove:<roleId>. Stateless, no ticket lookup,
+  // the actor removes their own role directly via the bot, no DM, no
+  // separate "how to do this manually" page needed.
+  if (customId.startsWith("role:remove:")) {
+    const roleId = customId.slice("role:remove:".length);
+    const who = actorDiscordId(i);
+    if (!who) return reply("Could not identify your Discord account.", true);
+    if (!roleId) return reply("That button is misconfigured.", true);
+    const ok = await removeGuildRole(who, roleId);
+    return reply(ok
+      ? "You've been unsubscribed from that scenario's role, you won't be pinged for it again."
+      : "Could not remove that role automatically. You may not have it, or the bot may be missing permissions, try removing it yourself in Server Settings if this persists.",
+      true);
+  }
+
+  const { kind, ticketId } = parseId(customId);
   const t = await getTicket(ticketId);
   if (!t) return reply("That ticket no longer exists.", inGuild(i));
   const who = actorDiscordId(i);
