@@ -68,6 +68,17 @@
     </div>
 
     <div class="card">
+      <h3>Notification preferences</h3>
+      <p style="font-size:.88rem;margin:6px 0 14px">Occasional Discord DMs from the Gatherly bot about product updates and changes, separate from your event reports above.</p>
+      <label class="field" style="display:flex;align-items:center;gap:10px;font-weight:500">
+        <input type="checkbox" id="dmNotifyOptIn" style="width:auto;margin:0">
+        Send me Gatherly product update DMs
+      </label>
+      <button class="btn btn-primary btn-sm" id="saveNotify">Save preference</button>
+      <div id="notifyMsg" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
       <h3>Staff access</h3>
       <div id="staffStatus"></div>
       <label class="field" style="margin-top:14px">Access code
