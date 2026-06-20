@@ -32,7 +32,7 @@ const CTYPE = {
   ACTION_ROW: 1, BUTTON: 2, TEXT_DISPLAY: 10, SECTION: 9,
   THUMBNAIL: 11, MEDIA_GALLERY: 12, SEPARATOR: 14, CONTAINER: 17,
 };
-const BSTYLE = { PRIMARY: 1, SECONDARY: 2, SUCCESS: 3, DANGER: 4, LINK: 5 };
+export const BSTYLE = { PRIMARY: 1, SECONDARY: 2, SUCCESS: 3, DANGER: 4, LINK: 5 };
 
 export const text = (content) => ({ type: CTYPE.TEXT_DISPLAY, content: String(content).slice(0, 4000) });
 export const separator = (spacing = 1, divider = true) => ({ type: CTYPE.SEPARATOR, spacing, divider });
@@ -41,7 +41,7 @@ export function linkButton(label, url, opts = {}) {
   return { type: CTYPE.BUTTON, style: BSTYLE.LINK, label: clampStr(label, 80) || "Open", url, ...(opts.emoji ? { emoji: opts.emoji } : {}) };
 }
 export function actionButton(label, customId, style = BSTYLE.PRIMARY, opts = {}) {
-  return { type: CTYPE.BUTTON, style, label: clampStr(label, 80) || "Button", custom_id: customId, ...(opts.emoji ? { emoji: opts.emoji } : {}) };
+  return { type: CTYPE.BUTTON, style, label: clampStr(label, 80) || "Button", custom_id: customId, ...(opts.emoji ? { emoji: opts.emoji } : {}), ...(opts.disabled ? { disabled: true } : {}) };
 }
 export const actionRow = (components) => ({ type: CTYPE.ACTION_ROW, components });
 
