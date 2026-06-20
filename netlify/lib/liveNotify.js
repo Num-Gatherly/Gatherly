@@ -3,10 +3,19 @@
 // boosted (credit-spent) Ultra-plan event goes live. Posted to the fixed
 // event-announcements channel, using Components V2 so the banner, description,
 // and quick-join button render as a clean card instead of a classic embed.
-import { usersStore, discordBotFetch, effectivePlan, BRAND, decrypt } from "./util.js";
-import { text, separator, container, actionRow, linkButton, GATHERLY_EMOJI_TAG, V2_FLAG } from "./broadcast.js";
+//
+// The card is then kept current: a scheduled job edits it once a minute with
+// a fresh in-server player count for as long as the event is live, since
+// Discord buttons can't self-update, the count has to be re-sent.
+import { usersStore, eventsStore, discordBotFetch, effectivePlan, decrypt } from "./util.js";
+import {
+  text, separator, container, actionRow, linkButton, actionButton, BSTYLE,
+  GATHERLY_EMOJI_TAG, V2_FLAG,
+} from "./broadcast.js";
 
 const SITE_URL = process.env.SITE_URL || "https://gatherly-erlc.xyz";
+const ERLC_BASE = "https://api.erlc.gg/v1";
+const PLAYER_CAP = 200;
 
 // Fixed destination: guild 1513859432109445181, channel 1517759589993550025.
 export const LIVE_NOTIFY_CHANNEL_ID = process.env.LIVE_NOTIFY_CHANNEL_ID || "1517759589993550025";
@@ -45,46 +54,82 @@ function bannerUrl(ev) {
   return null;
 }
 
-export function liveNotifyPayload(ev, host) {
+/* =========================================================================
+   LIVE PLAYER COUNT PROBE
+   Mirrors erlc.js's own erlcGet/getStoredKey pattern (not imported from
+   there since that file's helpers are private, kept local and identical in
+   shape so a scheduled job with no request context can still read it).
+   ========================================================================= */
+async function fetchT(url, opts = {}, ms = 7000) {
+  return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
+}
+function getStoredKey(host) {
+  if (!host?.erlcKeyEnc) return null;
+  try { return String(decrypt(host.erlcKeyEnc) || "").replace(/[\u200B-\u200D\uFEFF"'`]/g, "").trim(); } catch { return null; }
+}
+export async function fetchLivePlayerCount(host) {
+  const key = getStoredKey(host);
+  if (!key) return null;
+  try {
+    const [serverRes, playersRes] = await Promise.all([
+      fetchT(`${ERLC_BASE}/server`, { headers: { "server-key": key, Accept: "application/json" } }),
+      fetchT(`${ERLC_BASE}/server/players`, { headers: { "server-key": key, Accept: "application/json" } }),
+    ]);
+    if (!serverRes.ok || !playersRes.ok) return null;
+    const server = await serverRes.json();
+    const players = await playersRes.json();
+    const playerCount = Math.min(PLAYER_CAP, Array.isArray(players) ? players.length : 0);
+    const maxPlayers = Math.min(PLAYER_CAP, Number(server?.MaxPlayers) || 40);
+    return { playerCount, maxPlayers };
+  } catch { return null; }
+}
+
+/* =========================================================================
+   V2 CARD
+   ========================================================================= */
+export function liveNotifyPayload(ev, host, liveCount) {
   const role = roleIdFor(ev.scenario);
   const label = labelFor(ev.scenario);
   const banner = bannerUrl(ev);
   const joinable = isJoinUrl(ev.joinCode);
+  const countLabel = liveCount ? `${liveCount.playerCount}/${liveCount.maxPlayers}` : "-- / --";
 
   const blocks = [
-    text(`${GATHERLY_EMOJI_TAG} **${ev.title || "Gatherly Event"}** is live`),
     text([
-      `**Scenario:** ${label}`,
-      `**Host:** ${host?.username || ev.hostUsername || "Unknown"}`,
+      `# ${GATHERLY_EMOJI_TAG} ${label}!`,
+      `> \`-\` *${ev.title || "An event"}* is live!`,
+      ev.description ? `> \`-\` ${String(ev.description).slice(0, 300)}` : "",
+    ].filter(Boolean).join("\n")),
+    separator(),
+    text([
+      `\`-\` Scenario: *${label}`,
+      `\`-\` Host: ${host?.username || ev.hostUsername || "Unknown"}`,
     ].join("\n")),
+    separator(),
   ];
-  if (ev.description) {
-    blocks.push(separator());
-    blocks.push(text(`> ${String(ev.description).slice(0, 1000)}`));
-  }
-  if (banner) {
-    blocks.push({ type: 12, items: [{ media: { url: banner } }] });
-  }
+  if (banner) blocks.push({ type: 12, items: [{ media: { url: banner } }] });
+  blocks.push(text([
+    "-# `-` Boosted listing, posted automatically when the event went live.",
+    `-# \`-\` This feature is only unlocked for Gatherly Ultra members, purchase [here](${SITE_URL}/pricing)`,
+  ].join("\n")));
   blocks.push(separator());
-  blocks.push(text("-# Boosted listing, posted automatically when the event went live."));
 
-  const card = container(blocks, BRAND.color);
   const buttons = [];
   if (joinable) buttons.push(linkButton("Quick Join", ev.joinCode.trim(), { emoji: { name: "🚓" } }));
+  buttons.push(actionButton("Unsubscribe", `role:remove:${role}`, BSTYLE.DANGER));
+  buttons.push(actionButton(countLabel, `live:count:${ev.id}`, BSTYLE.SUCCESS, { disabled: true }));
+  blocks.push(actionRow(buttons));
+
+  const card = container(blocks, 0x7fa8ff);
 
   // Components V2 messages reject the legacy top-level `content` field
-  // outright (error MESSAGE_CANNOT_USE_LEGACY_FIELDS_WITH_COMPONENTS_V2), so
-  // the role ping has to live inside the component tree as its own Text
-  // Display instead, with allowed_mentions still controlling who actually
-  // gets pinged.
+  // outright, so the role ping has to live inside the component tree as its
+  // own Text Display instead, with allowed_mentions still controlling who
+  // actually gets pinged.
   return {
     allowed_mentions: { roles: [role] },
     flags: V2_FLAG,
-    components: [
-      text(`<@&${role}>`),
-      card,
-      ...(buttons.length ? [actionRow(buttons)] : []),
-    ],
+    components: [text(`<@&${role}>`), card],
   };
 }
 
@@ -99,10 +144,11 @@ export function eligibleForLiveNotify(ev, host) {
 
 export async function sendLiveNotify(ev, host) {
   if (!process.env.DISCORD_BOT_TOKEN) return { ok: false, reason: "bot-not-configured" };
+  const liveCount = await fetchLivePlayerCount(host);
   try {
     const r = await discordBotFetch(`/channels/${LIVE_NOTIFY_CHANNEL_ID}/messages`, {
       method: "POST",
-      body: JSON.stringify(liveNotifyPayload(ev, host)),
+      body: JSON.stringify(liveNotifyPayload(ev, host, liveCount)),
     });
     if (!r.ok) {
       // Discord puts the actual cause (bad permissions, malformed component,
@@ -112,9 +158,31 @@ export async function sendLiveNotify(ev, host) {
       console.log(`[liveNotify] Discord rejected the message for event ${ev.id}: status ${r.status}, body: ${detail.slice(0, 500)}`);
       return { ok: false, reason: `discord-${r.status}`, detail: detail.slice(0, 500) };
     }
-    return { ok: true };
+    const m = await r.json();
+    return { ok: true, messageId: m.id };
   } catch (e) {
     console.log(`[liveNotify] network error sending for event ${ev.id}: ${e?.message || e}`);
+    return { ok: false, reason: "network-error", detail: e?.message || String(e) };
+  }
+}
+
+// Re-edits the already-sent card with a fresh player count. Used by the
+// per-minute scheduled refresh while the event is still live.
+export async function refreshLiveNotify(ev, host) {
+  if (!process.env.DISCORD_BOT_TOKEN || !ev.liveCardMessageId) return { ok: false, reason: "no-message" };
+  const liveCount = await fetchLivePlayerCount(host);
+  try {
+    const r = await discordBotFetch(`/channels/${LIVE_NOTIFY_CHANNEL_ID}/messages/${ev.liveCardMessageId}`, {
+      method: "PATCH",
+      body: JSON.stringify(liveNotifyPayload(ev, host, liveCount)),
+    });
+    if (!r.ok) {
+      let detail = "";
+      try { detail = await r.text(); } catch {}
+      return { ok: false, reason: `discord-${r.status}`, detail: detail.slice(0, 500) };
+    }
+    return { ok: true };
+  } catch (e) {
     return { ok: false, reason: "network-error", detail: e?.message || String(e) };
   }
 }
@@ -124,7 +192,4 @@ export async function hostFor(ev) {
   return usersStore().get(ev.userId, { type: "json" });
 }
 
-// decrypt is re-exported for symmetry with events.js's own ER:LC key handling,
-// unused here directly but kept available for any future quick-join fallback
-// that needs the raw server key rather than the public share link.
-export { decrypt };
+export { eventsStore };
