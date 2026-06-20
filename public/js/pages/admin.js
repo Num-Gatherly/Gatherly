@@ -59,6 +59,7 @@ function switchTab(tab) {
   if (tab === "announcements") loadAnnouncements();
   if (tab === "notifications") { /* form only */ }
   if (tab === "broadcast") loadBroadcastRuns();
+  if (tab === "tests") loadThanksContent();
   if (tab === "executive" && me.role === "executive") loadExec();
   if (tab === "audit") loadAudit();
 }
@@ -377,7 +378,8 @@ function renderTickets(tickets) {
         </div>
         <span style="font-size:.78rem;color:${statusColor};white-space:nowrap">${statusLabel}</span>
       </div>
-    </div>`; }).join("");
+    </div>`;
+  }).join("");
   host.querySelectorAll(".ticket-row").forEach((row) => {
     row.addEventListener("click", () => openTicket(row.dataset.id, tickets.find((t) => t.id === row.dataset.id)));
   });
@@ -635,8 +637,10 @@ async function setRole(id) {
   const role = $("editRole")?.value || null;
   const msg = $("userMsg");
   try {
-    await api("/api/admin?action=set-role", { method: "POST", body: { userId: id, role } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Role updated.</div>`;
+    const d = await api("/api/admin?action=set-role", { method: "POST", body: { userId: id, role } });
+    if (msg) msg.innerHTML = d.pending
+      ? `<div class="alert alert-ok">Request sent for approval. The role will not change until accepted via the Discord DM.</div>`
+      : `<div class="alert alert-ok">Role updated.</div>`;
     loadUsers();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 };
@@ -794,6 +798,60 @@ async function testBroadcast() {
   try {
     await api("/api/broadcast?action=test", { method: "POST", body: { ...f, testDiscordId } });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Test DM sent. Check your Discord DMs.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
+
+async function testPurchaseThanks() {
+  const kind = $("thanksTestKind")?.value || "plan";
+  const msg = $("thanksTestMsg");
+  const body = kind === "credits" ? { kind, credits: parseInt($("thanksTestCredits")?.value, 10) || 6 } : { kind };
+  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Sending thank-you DM, receipt, and channel announcement&hellip;</div>`;
+  try {
+    await api("/api/billing?action=test-purchase-thanks", { method: "POST", body });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Sent. Check your Discord DMs (thank-you + receipt) and the supporters channel.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
+
+async function testLiveCard() {
+  const msg = $("liveCardTestMsg");
+  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Posting test card&hellip;</div>`;
+  try {
+    await api("/api/admin?action=test-live-card", { method: "POST" });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Posted. Check the live-notify channel.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
+
+async function testStatusRefresh() {
+  const msg = $("statusTestMsg");
+  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Refreshing&hellip;</div>`;
+  try {
+    await api("/api/admin?action=test-status-refresh", { method: "POST" });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Done. Check the status channel.</div>`;
+  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
+
+async function loadThanksContent() {
+  try {
+    const d = await api("/api/admin?action=purchase-thanks-content");
+    const c = d.content || {};
+    if ($("thanksBenefitsPlan")) $("thanksBenefitsPlan").value = c.benefitsPhrasePlan || "";
+    if ($("thanksBenefitsCredits")) $("thanksBenefitsCredits").value = c.benefitsPhraseCredits || "";
+    if ($("thanksFooterBanner")) $("thanksFooterBanner").value = c.footerBannerUrl || "";
+    if ($("thanksReceiptFooter")) $("thanksReceiptFooter").value = c.receiptFooterNote || "";
+  } catch {}
+}
+
+async function saveThanksContent() {
+  const msg = $("thanksContentMsg");
+  const body = {
+    benefitsPhrasePlan: $("thanksBenefitsPlan")?.value?.trim() || "",
+    benefitsPhraseCredits: $("thanksBenefitsCredits")?.value?.trim() || "",
+    footerBannerUrl: $("thanksFooterBanner")?.value?.trim() || "",
+    receiptFooterNote: $("thanksReceiptFooter")?.value?.trim() || "",
+  };
+  try {
+    await api("/api/admin?action=purchase-thanks-content-save", { method: "POST", body });
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Saved.</div>`;
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 }
 
@@ -1064,6 +1122,10 @@ const ACTIONS = {
   "add-notification": () => addNotification(),
   "preview-broadcast": () => previewBroadcast(),
   "test-broadcast": () => testBroadcast(),
+  "test-purchase-thanks": () => testPurchaseThanks(),
+  "test-live-card": () => testLiveCard(),
+  "test-status-refresh": () => testStatusRefresh(),
+  "save-thanks-content": () => saveThanksContent(),
   "send-broadcast": () => sendBroadcast(),
   "save-ad-config": () => saveAdConfig(),
   "approve-ad": (el) => approveAd(el.dataset.id),
@@ -1109,5 +1171,9 @@ document.addEventListener("click", (e) => {
   if (handler) handler(el, e);
 });
 
+$("thanksTestKind")?.addEventListener("change", () => {
+  const wrap = $("thanksTestCreditsWrap");
+  if (wrap) wrap.hidden = $("thanksTestKind").value !== "credits";
+});
+
 init();
-    
