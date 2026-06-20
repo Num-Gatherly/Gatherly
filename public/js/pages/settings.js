@@ -14,6 +14,7 @@ async function init() {
   if (!me) { $("gate").hidden = false; $("body").hidden = true; return; }
   renderStaffStatus();
   loadDelivery();
+  loadNotifyPref();
 }
 
 function renderStaffStatus() {
@@ -70,6 +71,20 @@ $("saveDelivery").onclick = async () => {
 $("removeWebhook").onclick = async () => {
   try { await api("/api/erlc?action=save-delivery", { method: "POST", body: { webhook: "", dmOptIn: $("dmOptIn").checked } }); $("webhook").value = ""; flash($("deliveryMsg"), "Webhook removed.", true); }
   catch (e) { flash($("deliveryMsg"), e.message); }
+};
+
+async function loadNotifyPref() {
+  try {
+    const d = await api("/api/broadcast?action=notifications");
+    $("dmNotifyOptIn").checked = !d.unsubscribed;
+  } catch {}
+}
+$("saveNotify").onclick = async () => {
+  try {
+    const unsubscribed = !$("dmNotifyOptIn").checked;
+    await api("/api/broadcast?action=notifications", { method: "POST", body: { unsubscribed } });
+    flash($("notifyMsg"), unsubscribed ? "You will no longer receive product update DMs." : "You're subscribed to product update DMs.", true);
+  } catch (e) { flash($("notifyMsg"), e.message); }
 };
 
 $("runDiag").onclick = async () => {
