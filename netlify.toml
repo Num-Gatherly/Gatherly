@@ -48,6 +48,11 @@
   from = "/reports"
   to = "/reports.html"
   status = 200
+  
+[[redirects]]
+  from = "/api/chat"
+  to = "/.netlify/functions/chat"
+  status = 200
 
 [[redirects]]
   from = "/login"
