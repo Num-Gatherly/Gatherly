@@ -15,7 +15,17 @@
     body { overflow-x: hidden; }
 
     /* ---------- hero ---------- */
-    .hero { padding: 124px 0 104px; }
+    .hero { padding: 124px 0 104px; position: relative; }
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 60% at 8% 20%, rgba(62,108,224,0.13) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 50% at 92% 10%, rgba(105,217,156,0.07) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 70% at 60% 90%, rgba(127,168,255,0.06) 0%, transparent 60%);
+}
     .hero-grid { grid-template-columns: 1.05fr 0.95fr; gap: 70px; }
     .hero h1 { font-size: clamp(2.6rem, 6vw, 4.6rem); opacity: 0; transform: translateY(28px); animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0.08s forwards; }
     .hero p.lede { font-size: 1.18rem; opacity: 0; transform: translateY(20px); animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0.20s forwards; }
