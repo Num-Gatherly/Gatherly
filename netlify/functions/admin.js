@@ -611,3 +611,90 @@ async function handler(req) {
       }));
   }
 }
+
+/* ----------------------------- DOWNTIME --------------------------------- */
+  if (action === "downtime-get") {
+    const d = (await miscStore().get("downtime", { type: "json" })) || { active: false };
+    return json({ downtime: d });
+  }
+
+  if (action === "downtime-set" && req.method === "POST") {
+    if (!isExec(user)) return json({ error: "Executive only." }, 403);
+    const b = await req.json().catch(() => ({}));
+    const d = {
+      active: Boolean(b.active),
+      message: clampStr(b.message, 200) || "We are currently down for maintenance.",
+      discordUrl: clampStr(b.discordUrl, 300) || "https://discord.gg/gatherly",
+      setAt: new Date().toISOString(),
+      setBy: user.username,
+    };
+    await miscStore().setJSON("downtime", d);
+    await audit(user, b.active ? "downtime.enable" : "downtime.disable", {});
+    return json({ ok: true, downtime: d });
+  }
+
+  /* ----------------------------- ANALYTICS -------------------------------- */
+  if (action === "analytics-track" && req.method === "POST") {
+    // Public endpoint - no auth required
+    const b = await req.json().catch(() => ({}));
+    const store = miscStore();
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const existing = (await store.get(`analytics:${dayKey}`, { type: "json" })) || {
+      date: dayKey, pageViews: {}, events: [], uniqueSessions: [], totalClicks: 0, totalViews: 0,
+    };
+    if (b.type === "pageview") {
+      const page = clampStr(b.page, 100) || "/";
+      existing.pageViews[page] = (existing.pageViews[page] || 0) + 1;
+      existing.totalViews = (existing.totalViews || 0) + 1;
+      if (b.session && !existing.uniqueSessions.includes(b.session)) {
+        existing.uniqueSessions.push(b.session);
+        if (existing.uniqueSessions.length > 5000) existing.uniqueSessions = existing.uniqueSessions.slice(-5000);
+      }
+    } else if (b.type === "click") {
+      existing.totalClicks = (existing.totalClicks || 0) + 1;
+      existing.events.push({
+        t: b.type,
+        page: clampStr(b.page, 100),
+        target: clampStr(b.target, 100),
+        at: new Date().toISOString(),
+      });
+      if (existing.events.length > 1000) existing.events = existing.events.slice(-1000);
+    } else if (b.type === "error") {
+      existing.events.push({
+        t: "error",
+        page: clampStr(b.page, 100),
+        msg: clampStr(b.message, 200),
+        at: new Date().toISOString(),
+      });
+      if (existing.events.length > 1000) existing.events = existing.events.slice(-1000);
+    }
+    await store.setJSON(`analytics:${dayKey}`, existing);
+    return json({ ok: true });
+  }
+
+  if (action === "analytics-get") {
+    if (!isStaff(user)) return json({ error: "Staff only." }, 403);
+    const days = Math.min(30, parseInt(url.searchParams.get("days") || "7", 10));
+    const store = miscStore();
+    const results = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayKey = d.toISOString().slice(0, 10);
+      const data = (await store.get(`analytics:${dayKey}`, { type: "json" })) || {
+        date: dayKey, pageViews: {}, events: [], uniqueSessions: [], totalClicks: 0, totalViews: 0,
+      };
+      results.push({
+        date: dayKey,
+        totalViews: data.totalViews || 0,
+        uniqueVisitors: (data.uniqueSessions || []).length,
+        totalClicks: data.totalClicks || 0,
+        topPages: Object.entries(data.pageViews || {})
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([page, views]) => ({ page, views })),
+        recentErrors: (data.events || []).filter(e => e.t === "error").slice(-10),
+      });
+    }
+    return json({ analytics: results });
+  }
