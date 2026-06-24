@@ -65,20 +65,24 @@ img { max-width: 100%; display: block; }
 /* ---------- nav ---------- */
 .nav {
   position: sticky; top: 0; z-index: 50;
-  background: rgba(9, 13, 19, 0.82);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--line);
+  background: rgba(7, 10, 16, 0.92);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid rgba(127, 168, 255, 0.1);
 }
-.nav-inner { display: flex; align-items: center; gap: 28px; height: 64px; }
-.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; color: var(--text); }
-.brand:hover { text-decoration: none; }
-.brand img { height: 26px; width: auto; }
-.nav-links { display: flex; gap: 22px; margin-left: auto; align-items: center; }
-.nav-links a { color: var(--muted); font-size: 0.92rem; font-weight: 500; }
-.nav-links a:hover { color: var(--text); text-decoration: none; }
-.nav-links a.active { color: var(--text); }
-.nav-cta { margin-left: 8px; }
-.nav-burger { display: none; margin-left: auto; background: none; border: 1px solid var(--line-strong); color: var(--text); border-radius: 8px; padding: 7px 11px; font-size: 1rem; cursor: pointer; }
+.nav-inner { display: flex; align-items: center; gap: 0; height: 58px; padding: 0 4px; }
+.brand { display: flex; align-items: center; gap: 9px; font-family: var(--font-display); font-weight: 700; font-size: 1.08rem; color: #fff; letter-spacing: -0.01em; padding: 0 6px; flex-shrink: 0; }
+.brand:hover { text-decoration: none; opacity: 0.9; }
+.brand img { height: 24px; width: auto; }
+.nav-divider { width: 1px; height: 22px; background: rgba(148,170,205,0.15); margin: 0 14px; flex-shrink: 0; }
+.nav-links { display: flex; gap: 2px; margin-left: 0; align-items: center; flex: 1; }
+.nav-links a { color: rgba(200,212,230,0.7); font-size: 0.875rem; font-weight: 500; padding: 6px 11px; border-radius: 8px; transition: color 0.15s, background 0.15s; white-space: nowrap; }
+.nav-links a:hover { color: #fff; background: rgba(255,255,255,0.06); text-decoration: none; }
+.nav-links a.active { color: #fff; background: rgba(127,168,255,0.12); font-weight: 600; }
+.nav-links a.active::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--signal); margin-right: 6px; vertical-align: middle; margin-top: -2px; }
+.nav-right { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.nav-cta { margin-left: 0; }
+.nav-burger { display: none; background: none; border: 1px solid rgba(148,170,205,0.2); color: var(--text); border-radius: 8px; padding: 7px 11px; font-size: 1rem; cursor: pointer; }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -332,9 +336,11 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
   .hero-grid, .grid-3, .grid-4, .split, .grid-2 { grid-template-columns: 1fr; }
   .foot-grid { grid-template-columns: 1fr 1fr; }
   .radar { max-width: 300px; margin: 0 auto; }
-  .nav-links { display: none; position: absolute; top: 64px; left: 0; right: 0; flex-direction: column; background: var(--ink-2); border-bottom: 1px solid var(--line); padding: 18px 24px; gap: 16px; align-items: flex-start; }
+  .nav-links { display: none; position: absolute; top: 58px; left: 0; right: 0; flex-direction: column; background: rgba(7,10,16,0.98); border-bottom: 1px solid rgba(127,168,255,0.1); padding: 14px 16px; gap: 4px; align-items: flex-start; }
   .nav-links.open { display: flex; }
   .nav-burger { display: block; }
+  .nav-divider { display: none; }
+  .nav-right { display: none; }
   .section { padding: 60px 0; }
 }
 
@@ -347,22 +353,31 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
    GATHERLY V3 ADDITIONS - append to the end of style.css
    ============================================================ */
 
-.nav-login { background: #ffffff !important; color: #0a1020 !important; }
-.nav-login:hover { background: #e8eefc !important; }
-.nav-controlroom { color: #ffffff !important; font-size: .88rem; font-weight: 500; margin-right: 4px; }
-.nav-controlroom:hover { text-decoration: none; opacity: .85; }
+/* ---------- nav user & login styles ---------- */
+.nav-login {
+  background: rgba(127,168,255,0.15) !important; color: #c8d8ff !important;
+  border: 1px solid rgba(127,168,255,0.3) !important; font-size: .84rem !important;
+  padding: 7px 14px !important; border-radius: 8px !important;
+  transition: background .15s, border-color .15s !important;
+}
+.nav-login:hover { background: rgba(127,168,255,0.25) !important; border-color: rgba(127,168,255,0.5) !important; }
+.nav-controlroom {
+  color: rgba(200,212,230,0.85) !important; font-size: .84rem; font-weight: 500; margin-right: 4px;
+  padding: 6px 11px; border-radius: 8px; transition: color .15s, background .15s;
+}
+.nav-controlroom:hover { color: #fff !important; background: rgba(255,255,255,0.06); text-decoration: none; opacity: 1; }
 
-.nav-user-wrap { display: flex; align-items: center; gap: 10px; }
+.nav-user-wrap { display: flex; align-items: center; gap: 8px; }
 .nav-user-btn {
   display: flex; align-items: center; gap: 8px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(148,170,205,0.25);
-  color: #ffffff; font-size: .88rem; font-weight: 600; font-family: var(--font-body);
-  padding: 6px 12px 6px 6px; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(148,170,205,0.2);
+  color: #ffffff; font-size: .84rem; font-weight: 500; font-family: var(--font-body);
+  padding: 5px 10px 5px 5px; border-radius: 999px; cursor: pointer;
   transition: border-color .2s, background .2s;
 }
-.nav-user-btn:hover { border-color: rgba(127,168,255,0.5); background: rgba(127,168,255,0.08); }
-.nav-user-name { color: #ffffff; }
-.nav-user-caret { font-size: .7rem; color: rgba(255,255,255,0.5); }
+.nav-user-btn:hover { border-color: rgba(127,168,255,0.45); background: rgba(127,168,255,0.08); }
+.nav-user-name { color: #ffffff; font-weight: 600; }
+.nav-user-caret { font-size: .65rem; color: rgba(255,255,255,0.4); margin-left: 2px; }
 
 .nav-dropdown {
   position: fixed; z-index: 9999; min-width: 210px;
