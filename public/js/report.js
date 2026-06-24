@@ -35,12 +35,40 @@ function box(title, bodyHtml, opts = {}) {
 }
 
 const sectionHeader = (label, sub) => `
-  <div class="rep-section-head">
-    <h2 class="rep-section-title">${esc(label)}</h2>
-    ${sub ? `<p class="rep-section-sub">${esc(sub)}</p>` : ""}
+  <div class="rep-section-head-v2">
+    <h2>${esc(label)}</h2>
+    ${sub ? `<p>${esc(sub)}</p>` : ""}
   </div>`;
 
 /* ------------------------------- visuals --------------------------------- */
+function whoopRing(value, max, color, label, unit = "") {
+  const r = 52, sw = 8, c = 2 * Math.PI * r;
+  const pct = Math.min(1, Math.max(0, value / max));
+  const off = c * (1 - pct);
+  const size = 124;
+  const gId = `ring-glow-${Math.random().toString(36).slice(2,7)}`;
+  return `<div class="whoop-ring-item">
+    <div class="whoop-ring-svg" style="width:${size}px;height:${size}px">
+      <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="transform:rotate(-90deg)">
+        <defs>
+          <filter id="${gId}" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="rgba(148,170,205,0.1)" stroke-width="${sw}"/>
+        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}"
+          stroke-linecap="round" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"
+          filter="url(#${gId})" opacity="0.9"/>
+      </svg>
+      <div class="whoop-ring-center">
+        <b style="color:${color}">${value}${unit}</b>
+        <span>${label}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
 function dial(score) {
   const r = 70, c = 2 * Math.PI * r, off = c * (1 - score / 100);
   return `
@@ -74,19 +102,15 @@ function funnel(f) {
 function timeline(points) {
   if (!points?.length) return `<p class="note">No timeline data in this window.</p>`;
   const max = Math.max(...points.map((p) => safeNum(p.n)), 1);
-  return `
-    <div style="overflow:hidden;width:100%">
-      <div style="display:flex;align-items:flex-end;gap:4px;height:120px;padding-bottom:24px;box-sizing:border-box;overflow:hidden">
-        ${points.map((p) => {
-          const h = Math.max(4, (safeNum(p.n) / max) * 96);
-          const label = new Date(p.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0">
-            <div style="width:100%;height:${h}px;background:linear-gradient(180deg,var(--signal),var(--signal-deep,#3e6ce0));border-radius:4px 4px 0 0" title="${safeNum(p.n)} players"></div>
-            <div style="font-size:.55rem;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center">${label}</div>
-          </div>`;
-        }).join("")}
-      </div>
+  const bars = points.map((p) => {
+    const h = Math.max(4, Math.round((safeNum(p.n) / max) * 78));
+    const label = new Date(p.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return `<div class="wh-bar-wrap">
+      <div class="wh-bar" style="height:${h}px" data-n="${safeNum(p.n)} players"></div>
+      <div class="wh-bar-label">${label}</div>
     </div>`;
+  }).join("");
+  return `<div class="wh-timeline">${bars}</div>`;
 }
 
 // Best-time-to-host heatmap: 7 days x 24 hours, hotter = better historical turnout.
@@ -125,8 +149,8 @@ function heatmap(data) {
 }
 
 const momentumBadge = (m) => !m ? "" : m.direction === "up"
-  ? `<span class="badge badge-good">Trending up +${m.changePct}%</span>`
-  : m.direction === "down" ? `<span class="badge badge-bad">Declining ${m.changePct}%</span>` : `<span class="badge">Stable</span>`;
+  ? `<span class="whoop-momentum up">↑ +${m.changePct}%</span>`
+  : m.direction === "down" ? `<span class="whoop-momentum down">↓ ${m.changePct}%</span>` : `<span class="whoop-momentum flat">→ Stable</span>`;
 
 function advicePill(text) {
   return `<p class="note" style="margin-top:8px;padding:8px 12px;background:rgba(127,168,255,.07);border-radius:8px;border-left-color:var(--signal)">${esc(text)}</p>`;
@@ -327,30 +351,58 @@ export function renderReport(el, r) {
       <a class="btn btn-primary" href="/advertise" style="white-space:nowrap">List your next event</a>
     </div>`;
 
-  /* ---- assemble ---- */
-  const planBadge = plan === "ultra" ? `<span class="badge badge-boost">Ultra Report</span>` : plan === "pro" ? `<span class="badge badge-boost">Pro Report</span>` : `<span class="badge">Free preview</span>`;
-  el.innerHTML = `
-  <div class="card rep-box" style="margin-bottom:18px">
-    <div style="display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;align-items:center">
-      <div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <h3 style="font-size:1.5rem">${esc(r.eventTitle || "Event")}</h3>${planBadge}${momentumBadge(r.momentum)}
+  /* ---- WHOOP hero section ---- */
+  const score = safeNum(r.score, 78);
+  const peakConc = safeNum(r.peakConcurrent, 42);
+  const maxPlayers = safeNum(r.maxPlayers, 50);
+  const retained = safeNum(r.retained30, 49);
+  const joins = safeNum(r.joinsInWindow, 87);
+  const planBadge = plan === "ultra" ? `<span class="badge badge-boost">Ultra</span>` : plan === "pro" ? `<span class="badge badge-boost">Pro</span>` : `<span class="badge">Free</span>`;
+
+  const heroRings = `
+    <div class="whoop-rings">
+      ${whoopRing(score, 100, scoreColor(score), "Health Score")}
+      ${whoopRing(peakConc, maxPlayers || 50, "var(--signal)", "Peak / Slots")}
+      ${whoopRing(Math.min(100, Math.round((retained / Math.max(joins, 1)) * 100)), 100, "var(--live,#ffb454)", "30m Retention", "%")}
+    </div>`;
+
+  const hero = `
+  <div class="whoop-hero">
+    <div class="whoop-hero-top">
+      <div class="whoop-event-meta">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+          ${planBadge}${momentumBadge(r.momentum)}
+          <span class="badge">Verified via ERLC API</span>
         </div>
-        <p style="font-size:.88rem;margin-top:6px">${esc(r.serverName || "Server")} &middot; ${esc(r.scenario || "")} &middot; ${fmtLocal(r.windowStart)} - ${new Date(r.windowEnd).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+        <h3>${esc(r.eventTitle || "Event")}</h3>
+        <p>${esc(r.serverName || "Server")} &middot; ${esc(r.scenario || "")} &middot; ${fmtLocal(r.windowStart)}&ndash;${new Date(r.windowEnd).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
       </div>
-      <div class="grid grid-2" style="gap:12px;min-width:280px">
-        ${miniStat(safeNum(r.joinsInWindow, 87), "Joins in window")}
-        ${miniStat(safeNum(r.peakConcurrent, 42), "Peak concurrent")}
-        ${miniStat(safeNum(r.avgSessionMin, 61) + "m", "Avg session")}
-        ${miniStat(safeNum(r.retained30, 49), "Retained 30m+")}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-self:flex-start">
+        ${r.delivery?.dm ? `<span class="badge badge-good">DM sent</span>` : ""}
+        ${r.delivery?.webhook ? `<span class="badge badge-good">Webhook sent</span>` : ""}
       </div>
     </div>
-  </div>
+    ${heroRings}
+    <div class="whoop-kpi-strip">
+      <div class="whoop-kpi"><b>${safeNum(r.joinsInWindow, 87)}</b><span>Joins in window</span></div>
+      <div class="whoop-kpi"><b>${safeNum(r.uniquePlayers, 71)}</b><span>Unique players</span></div>
+      <div class="whoop-kpi"><b>${safeNum(r.avgSessionMin, 61)}m</b><span>Avg session</span></div>
+      <div class="whoop-kpi"><b>${safeNum(r.retained30, 49)}</b><span>Retained 30m+</span></div>
+      <div class="whoop-kpi"><b>${safeNum(r.staffOnline ?? r.staff?.online?.length, 9)}</b><span>Staff online</span></div>
+      <div class="whoop-kpi" style="padding-right:0">
+        <button class="btn btn-ghost btn-sm" id="shareCardBtn" style="margin-top:4px">Share card</button>
+      </div>
+    </div>
+  </div>`;
 
-  ${sectionHeader("Analytics", "Your full post-event analytics report. Included with Gatherly Pro and Ultra.")}
+  /* ---- assemble ---- */
+  el.innerHTML = `
+  ${hero}
+
+  ${sectionHeader("Analytics", "Post-event analytics · Gatherly Pro & Ultra")}
   <div class="grid grid-2 rep-grid">${analytics}</div>
 
-  ${sectionHeader("Ultra intelligence", "The deep-signal layer. Included with Gatherly Ultra.")}
+  ${sectionHeader("Ultra Intelligence", "Deep-signal layer · Gatherly Ultra")}
   <div class="grid grid-2 rep-grid">${ultra}</div>
 
   <div style="margin:26px 0 18px">${staffBlock}</div>
@@ -361,15 +413,12 @@ export function renderReport(el, r) {
     <b>Disclaimer:</b> ${esc(r.disclaimer || "Some data points rely on ER:LC API logs which may have a short delay. Staff detection includes all players with Moderator permissions or above. Locked panels show representative sample data until unlocked.")}
   </div>
 
-  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:16px">
-    <button class="btn btn-ghost btn-sm" id="shareCardBtn">Download share card</button>
-    <span class="badge">Verified via the official ER:LC API</span>
-    ${r.delivery?.dm ? `<span class="badge badge-good">DM delivered</span>` : ""}
-    ${r.delivery?.webhook ? `<span class="badge badge-good">Webhook delivered</span>` : ""}
-    <span style="margin-left:auto;font-size:.75rem;color:var(--muted)">${esc(r.generatedBy || "Gatherly API")}</span>
-  </div>`;
+  <div style="margin-top:16px;font-size:.75rem;color:var(--muted);text-align:right">${esc(r.generatedBy || "Gatherly API")}</div>
+  ${renderChatUI()}`;
 
   el.querySelector("#shareCardBtn")?.addEventListener("click", () => downloadShareCard(r));
+  initChat(r);
+
 }
 
 export function downloadShareCard(r) {
@@ -407,4 +456,108 @@ export function downloadShareCard(r) {
   a.download = `gatherly-report-${(r.eventTitle || "event").replace(/\W+/g, "-").toLowerCase()}.png`;
   a.href = c.toDataURL("image/png");
   a.click();
+}
+
+/* =========================================================================
+   AI CHAT COMPONENT
+   ========================================================================= */
+function renderChatUI() {
+  return `
+  <button class="ai-fab" id="aiFab" title="Ask the AI analyst">
+    <div class="ai-fab-badge"></div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  </button>
+  <div class="ai-panel" id="aiPanel">
+    <div class="ai-panel-head">
+      <div class="ai-orb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+        </svg>
+      </div>
+      <div class="ai-panel-head-text">
+        <b>ERLC AI Analyst</b>
+        <span>Ask anything about this report</span>
+      </div>
+      <button class="ai-panel-close" id="aiClose">✕</button>
+    </div>
+    <div class="ai-messages" id="aiMessages"></div>
+    <div class="ai-disclaimer">Only discusses ER:LC report data &mdash; powered by Claude AI</div>
+    <div class="ai-input-row">
+      <textarea class="ai-input" id="aiInput" placeholder="Ask about your event data..." rows="1"></textarea>
+      <button class="ai-send" id="aiSend">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+function initChat(reportData) {
+  const fab = document.getElementById("aiFab");
+  const panel = document.getElementById("aiPanel");
+  const closeBtn = document.getElementById("aiClose");
+  const input = document.getElementById("aiInput");
+  const sendBtn = document.getElementById("aiSend");
+  const messages = document.getElementById("aiMessages");
+  if (!fab || !panel) return;
+
+  const history = [];
+
+  const addMsg = (role, text) => {
+    const div = document.createElement("div");
+    div.className = `ai-msg ${role}`;
+    div.textContent = text;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    return div;
+  };
+
+  addMsg("ai", `Hi! I'm your ERLC AI Analyst. I've read your full report for "${reportData.eventTitle || "this event"}". Ask me anything — what went well, what to improve, staff performance, player retention, or anything else from this event.`);
+
+  const toggle = () => panel.classList.toggle("open");
+  fab.addEventListener("click", toggle);
+  closeBtn.addEventListener("click", () => panel.classList.remove("open"));
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(90, input.scrollHeight) + "px";
+  });
+  sendBtn.addEventListener("click", send);
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    input.value = "";
+    input.style.height = "auto";
+    addMsg("user", text);
+    history.push({ role: "user", content: text });
+    sendBtn.disabled = true;
+    const thinkingEl = addMsg("ai thinking", "Analysing your report…");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, history: history.slice(-8), reportContext: reportData }),
+      });
+      const data = await res.json();
+      const reply = data.reply || "Sorry, I couldn't get a response right now.";
+      thinkingEl.className = "ai-msg ai";
+      thinkingEl.textContent = reply;
+      history.push({ role: "assistant", content: reply });
+    } catch {
+      thinkingEl.className = "ai-msg ai";
+      thinkingEl.textContent = "Connection error — please try again.";
+    } finally {
+      sendBtn.disabled = false;
+      messages.scrollTop = messages.scrollHeight;
+    }
+  }
 }
