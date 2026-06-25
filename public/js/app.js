@@ -1,4 +1,4 @@
-\// Gatherly shared frontend. No frameworks, no external scripts.
+// Gatherly shared frontend. No frameworks, no external scripts.
 
 export const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -38,15 +38,16 @@ function getOrCreateSession() {
 }
 
 function trackEvent(type, extra = {}) {
+  // Fire and forget - never let analytics block or throw
   try {
     const body = JSON.stringify({ type, page: location.pathname, session: getOrCreateSession(), ...extra });
-    if (navigator.sendBeacon) navigator.sendBeacon("/api/admin?action=analytics-track", new Blob([body], { type: "application/json" }));
-    else fetch("/api/admin?action=analytics-track", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true });
+    fetch("/api/admin?action=analytics-track", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
   } catch {}
 }
 
 function initAnalytics() {
-  trackEvent("pageview");
+  // Defer pageview until after page is interactive so it doesn't block rendering
+  setTimeout(() => trackEvent("pageview"), 100);
   document.addEventListener("click", (e) => {
     const el = e.target.closest("a, button, [data-track]");
     if (!el) return;
@@ -57,6 +58,7 @@ function initAnalytics() {
 
 /* =========================================================================
    ERROR OVERLAY - shows broken rocket on JS errors
+   Only activates after page is fully loaded to avoid hiding content
    ========================================================================= */
 const ROCKET_SVG = `<svg viewBox="0 0 120 160" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:90px;animation:g-wobble 1.4s ease-in-out infinite">
   <ellipse cx="60" cy="75" rx="22" ry="42" fill="#7fa8ff" opacity=".9"/>
@@ -84,7 +86,10 @@ const OVERLAY_STYLES = `
     @keyframes g-dt-float{0%,100%{transform:translateY(0) rotate(-3deg);}50%{transform:translateY(-12px) rotate(3deg);}}
   </style>`;
 
+let _errorHandlingActive = false;
+
 function showErrorOverlay(message = "An unexpected error occurred.") {
+  if (!_errorHandlingActive) return; // Don't show during page load
   if (document.getElementById("g-error-overlay")) return;
   trackEvent("error", { message: String(message).slice(0, 200) });
   const overlay = document.createElement("div");
@@ -112,6 +117,8 @@ function initErrorHandling() {
     const msg = e.reason?.message || String(e.reason) || "An unhandled promise error occurred.";
     showErrorOverlay(msg);
   });
+  // Only activate error overlay after page is fully rendered
+  window.addEventListener("load", () => { _errorHandlingActive = true; }, { once: true });
 }
 
 /* =========================================================================
