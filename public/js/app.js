@@ -114,11 +114,15 @@ function initErrorHandling() {
     showErrorOverlay(e.message || "A script error occurred.");
   });
   window.addEventListener("unhandledrejection", (e) => {
-    const msg = e.reason?.message || String(e.reason) || "An unhandled promise error occurred.";
-    showErrorOverlay(msg);
+    // Ignore fetch aborts that fire when the user navigates away
+    const msg = e.reason?.message || String(e.reason) || "";
+    if (!msg || /abort|cancel|network|load|fetch/i.test(msg)) return;
+    showErrorOverlay(msg || "An unhandled promise error occurred.");
   });
   // Only activate error overlay after page is fully rendered
   window.addEventListener("load", () => { _errorHandlingActive = true; }, { once: true });
+  // Deactivate while page is unloading so in-flight fetches don't trigger it
+  window.addEventListener("beforeunload", () => { _errorHandlingActive = false; });
 }
 
 /* =========================================================================
