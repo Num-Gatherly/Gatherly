@@ -2,7 +2,6 @@
   "name": "gatherly",
   "version": "0.1.0",
   "private": true,
-  "description": "Gatherly — event advertising + engagement reports for ER:LC",
   "type": "module",
   "scripts": {
     "dev": "netlify dev"
