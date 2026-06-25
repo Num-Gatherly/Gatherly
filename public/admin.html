@@ -75,6 +75,8 @@
     <button class="cr-tab exec-only" data-tab="tests">Tests</button>
     <button class="cr-tab exec-only" data-tab="executive">Executive</button>
     <button class="cr-tab" data-tab="audit">Audit log</button>
+    <button class="cr-tab exec-only" data-tab="downtime">Downtime</button>
+    <button class="cr-tab" data-tab="analytics">Analytics</button>
   </nav>
 
   <!-- CHECKLIST -->
@@ -175,14 +177,13 @@
     </div>
   </div>
 
-  <!-- BROADCAST (Discord DM blast) -->
+  <!-- BROADCAST -->
   <div class="cr-panel exec-only" data-panel="broadcast">
     <div class="split-panel">
       <div>
         <div class="card">
           <h3 style="margin-bottom:6px">Discord DM broadcast</h3>
           <p style="margin-bottom:14px;color:var(--muted)">Sends a Components V2 DM card to every Gatherly user who has linked their Discord account. Test it on yourself first, this cannot be recalled once sent.</p>
-
           <label class="field">Title
             <input id="bcastTitle" class="input" maxlength="256" placeholder="V5.8 Update &amp; New Bundles">
           </label>
@@ -192,7 +193,6 @@
           <label class="field">Image URL (optional)
             <input id="bcastImage" class="input" maxlength="400" placeholder="https://&hellip;/image.png">
           </label>
-
           <div class="split-panel" style="gap:12px">
             <label class="field">Change log button text <small>Leave blank to hide the button.</small>
               <input id="bcastChangeLogText" class="input" maxlength="80" placeholder="View Full Change Log">
@@ -201,31 +201,27 @@
               <input id="bcastChangeLogUrl" class="input" maxlength="400" placeholder="https://&hellip;/news/v5-8">
             </label>
           </div>
-
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
             <button class="btn btn-secondary btn-sm" data-action="preview-broadcast">Preview</button>
           </div>
           <div id="bcastPreview" style="margin-top:14px"></div>
         </div>
-
         <div class="card" style="margin-top:18px">
           <h3 style="margin-bottom:6px">Test send</h3>
-          <p style="margin-bottom:14px;color:var(--muted)">DM this exact card to a single Discord user ID first, usually your own, to check it renders correctly before going wide.</p>
+          <p style="margin-bottom:14px;color:var(--muted)">DM this exact card to a single Discord user ID first.</p>
           <label class="field">Your Discord user ID
             <input id="bcastTestId" class="input" maxlength="32" placeholder="e.g. 482910283746102934">
           </label>
           <button class="btn btn-secondary btn-sm" data-action="test-broadcast">Send test DM to me</button>
           <div id="bcastTestMsg" style="margin-top:10px"></div>
         </div>
-
         <div class="card" style="margin-top:18px;border-color:rgba(255,122,122,.35)">
           <h3 style="margin-bottom:6px;color:#ff7a7a">Send to everyone</h3>
-          <p style="margin-bottom:14px;color:var(--muted)">This DMs <strong id="bcastAudienceCount">every connected user</strong>. There is no undo. Test it first.</p>
+          <p style="margin-bottom:14px;color:var(--muted)">This DMs <strong id="bcastAudienceCount">every connected user</strong>. There is no undo.</p>
           <button class="btn btn-danger btn-sm" data-action="send-broadcast">Notify every Gatherly member</button>
           <div id="bcastSendMsg" style="margin-top:10px"></div>
         </div>
       </div>
-
       <div>
         <h3 style="margin-bottom:14px">Broadcast history</h3>
         <div id="bcastRuns"><p style="color:var(--muted)">Loading&hellip;</p></div>
@@ -239,7 +235,7 @@
       <div>
         <div class="card">
           <h3 style="margin-bottom:6px">Test purchase thank-you</h3>
-          <p style="margin-bottom:14px;color:var(--muted)">Sends the real purchase thank-you DM, the receipt DM, and the supporters-channel announcement, the same flow fired by the Stripe webhook and Robux verification, without needing an actual payment.</p>
+          <p style="margin-bottom:14px;color:var(--muted)">Sends the real purchase thank-you DM, the receipt DM, and the supporters-channel announcement.</p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
             <label class="field" style="flex:1;min-width:160px">Type
               <select id="thanksTestKind" class="input">
@@ -254,27 +250,24 @@
           </div>
           <div id="thanksTestMsg" style="margin-top:10px"></div>
         </div>
-
         <div class="card" style="margin-top:18px">
           <h3 style="margin-bottom:6px">Test live-event card</h3>
-          <p style="margin-bottom:14px;color:var(--muted)">Posts a sample live-event card to the live-notify channel using your own account as the host, so the live player count reflects your real ER:LC key if one is saved in Settings.</p>
+          <p style="margin-bottom:14px;color:var(--muted)">Posts a sample live-event card to the live-notify channel.</p>
           <button class="btn btn-secondary btn-sm" data-action="test-live-card">Post test card</button>
           <div id="liveCardTestMsg" style="margin-top:10px"></div>
         </div>
-
         <div class="card" style="margin-top:18px">
           <h3 style="margin-bottom:6px">Force status message refresh</h3>
-          <p style="margin-bottom:14px;color:var(--muted)">Manually runs the same check-and-edit cycle the per-minute scheduler runs, useful to confirm the status message updates correctly without waiting up to a minute.</p>
+          <p style="margin-bottom:14px;color:var(--muted)">Manually runs the same check-and-edit cycle the per-minute scheduler runs.</p>
           <button class="btn btn-secondary btn-sm" data-action="test-status-refresh">Refresh now</button>
           <div id="statusTestMsg" style="margin-top:10px"></div>
         </div>
       </div>
-
       <div>
         <h3 style="margin-bottom:14px">Purchase thank-you message content</h3>
         <div class="card">
-          <p style="margin-bottom:14px;color:var(--muted)">Edits the wording used in the thank-you DM, the channel announcement, and the receipt. Leave a field blank to fall back to the built-in default.</p>
-          <label class="field">Benefits phrase (plan purchases) <small>Shown after the bolded item name, before the pricing link.</small>
+          <p style="margin-bottom:14px;color:var(--muted)">Edits the wording used in the thank-you DM, the channel announcement, and the receipt.</p>
+          <label class="field">Benefits phrase (plan purchases)
             <textarea id="thanksBenefitsPlan" class="input" maxlength="200" rows="2" placeholder="We trust you are going to enjoy the benefits that can be found"></textarea>
           </label>
           <label class="field">Benefits phrase (credit purchases)
@@ -284,7 +277,7 @@
             <input id="thanksFooterBanner" class="input" maxlength="400" placeholder="https://&hellip;/image.webp">
           </label>
           <label class="field">Receipt footer note
-            <textarea id="thanksReceiptFooter" class="input" maxlength="300" rows="2" placeholder="Keep this for your records. Questions about a charge? Reach support from the Gatherly website."></textarea>
+            <textarea id="thanksReceiptFooter" class="input" maxlength="300" rows="2" placeholder="Keep this for your records."></textarea>
           </label>
           <button class="btn btn-primary btn-sm" data-action="save-thanks-content">Save</button>
           <div id="thanksContentMsg" style="margin-top:10px"></div>
@@ -306,23 +299,19 @@
           <label class="field">Seconds per advertisement
             <input id="adRotateSec" class="input" type="number" min="3" max="60" placeholder="8">
           </label>
-          <label class="field">House (Gatherly) weight <small>How often house ads appear in the rotation.</small>
+          <label class="field">House (Gatherly) weight
             <input id="adHouseWeight" class="input" type="number" min="0" max="20" placeholder="4">
           </label>
-          <label class="field">Advertiser weight <small>How often each paid ad appears.</small>
+          <label class="field">Advertiser weight
             <input id="adAdvWeight" class="input" type="number" min="1" max="20" placeholder="1">
           </label>
           <button class="btn btn-primary btn-sm" data-action="save-ad-config">Save rotation</button>
-          <p class="note" style="margin-top:10px">Default 4:1 means Gatherly's own messages get ~80% of impressions while paid ads fill the rest. Adjust freely.</p>
           <div id="adCfgMsg" style="margin-top:10px"></div>
         </div>
       </div>
     </div>
-
     <hr style="border:0;border-top:1px solid var(--line);margin:28px 0">
-
     <h3 style="margin-bottom:6px">House advertising</h3>
-    <p class="note" style="margin:0 0 16px">These are Gatherly's own promo slots plus the ASB Advertising house ads. They rotate alongside paid ads using the house weight above. Toggle one off to pull it without deleting it.</p>
     <div class="split-panel">
       <div>
         <h4 style="margin-bottom:10px">Active house ads</h4>
@@ -341,7 +330,7 @@
           <label class="field">Title
             <input id="houseAdTitle" class="input" maxlength="80" placeholder="Promote your event with Gatherly">
           </label>
-          <label class="field">Subtitle <small>Smaller line under the title.</small>
+          <label class="field">Subtitle
             <input id="houseAdSubtitle" class="input" maxlength="160" placeholder="Reach hundreds of ER:LC players in seconds.">
           </label>
           <label class="field">Image URL (optional)
@@ -391,10 +380,10 @@
           <label class="field">Banner image URL (optional)
             <input id="newsBanner" class="input" maxlength="500" placeholder="https://&hellip;">
           </label>
-          <label class="field">Excerpt <small>One-line teaser shown in the article list.</small>
+          <label class="field">Excerpt
             <input id="newsExcerpt" class="input" maxlength="200" placeholder="What's new in this update">
           </label>
-          <label class="field">Body <small>Rich text. Use the toolbar to format, add headings, images and links.</small></label>
+          <label class="field">Body</label>
           <div class="rt-toolbar" id="rtToolbar">
             <select class="rt-sel" id="rtBlock" title="Text style">
               <option value="p">Paragraph</option>
@@ -445,7 +434,7 @@
       <div>
         <h3 style="margin-bottom:14px">Admin access codes</h3>
         <div class="card" style="margin-bottom:14px">
-          <p style="font-size:.85rem;margin-bottom:10px">Generate a single-use <b>admin</b> code. Codes are stored hashed (never in plaintext) and <b>expire 30 minutes</b> after generation. There is no executive code - executives are assigned directly from the Users tab. Every redemption now requires DM approval before the role is actually granted, the code itself isn't consumed until accepted.</p>
+          <p style="font-size:.85rem;margin-bottom:10px">Generate a single-use <b>admin</b> code. Codes expire 30 minutes after generation.</p>
           <button class="btn btn-ghost btn-sm" data-action="gen-code">Generate admin code</button>
           <div id="execMsg" style="margin-top:10px"></div>
         </div>
@@ -473,6 +462,55 @@
   <div class="cr-panel" data-panel="audit">
     <h3 style="margin-bottom:14px">Audit log</h3>
     <div id="auditList"><p style="color:var(--muted)">Loading&hellip;</p></div>
+  </div>
+
+  <!-- DOWNTIME -->
+  <div class="cr-panel exec-only" data-panel="downtime">
+    <div class="wrap" style="max-width:900px;padding-top:0">
+      <div class="card" style="padding:28px">
+        <h2 style="margin-bottom:4px">Downtime Mode</h2>
+        <p style="color:var(--muted);margin-bottom:24px">When active, every page shows a maintenance overlay. The admin panel stays accessible to staff.</p>
+        <div id="dtStatus" style="margin-bottom:20px;padding:12px 16px;border-radius:10px;background:rgba(105,217,156,.08);border:1px solid rgba(105,217,156,.2);color:#69d99c;font-weight:600;">
+          Checking status&hellip;
+        </div>
+        <div style="display:grid;gap:14px;max-width:480px">
+          <label style="font-size:.85rem;color:var(--muted);font-weight:600">Maintenance message</label>
+          <textarea id="dtMessage" rows="2" class="input" placeholder="We are currently down for maintenance. We'll be back shortly." style="resize:vertical"></textarea>
+          <label style="font-size:.85rem;color:var(--muted);font-weight:600">Discord server URL</label>
+          <input id="dtDiscordUrl" type="url" class="input" placeholder="https://discord.gg/yourserver">
+        </div>
+        <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" data-action="enable-downtime">Enable Downtime</button>
+          <button class="btn" data-action="disable-downtime" style="background:rgba(255,122,122,.12);color:#ff7a7a;border-color:rgba(255,122,122,.2)">Disable Downtime</button>
+        </div>
+        <div id="dtMsg" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div class="cr-panel" data-panel="analytics">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="margin:0">Analytics</h2>
+      <select id="analyticsDays" class="input" style="width:auto;padding:6px 12px" data-action="reload-analytics">
+        <option value="7">Last 7 days</option>
+        <option value="14">Last 14 days</option>
+        <option value="30">Last 30 days</option>
+      </select>
+    </div>
+    <div id="analyticsStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px"></div>
+    <div class="card" style="padding:20px;margin-bottom:16px">
+      <h3 style="margin-bottom:14px">Page views by day</h3>
+      <div id="analyticsChart" style="display:flex;align-items:flex-end;gap:6px;height:140px;overflow-x:auto;padding-bottom:4px"></div>
+    </div>
+    <div class="card" style="padding:20px;margin-bottom:16px">
+      <h3 style="margin-bottom:14px">Top pages</h3>
+      <table class="tbl" id="analyticsTopPages"><thead><tr><th>Page</th><th>Views</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card" style="padding:20px">
+      <h3 style="margin-bottom:14px">Recent errors</h3>
+      <div id="analyticsErrors" style="font-size:.85rem;color:var(--muted)">No errors logged.</div>
+    </div>
   </div>
 
 </section>
