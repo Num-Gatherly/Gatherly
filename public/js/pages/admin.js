@@ -3,8 +3,6 @@ boot("/admin");
 
 const $ = (id) => document.getElementById(id);
 
-// Inline onerror="" attributes are blocked by the site's CSP, so broken
-// avatar/ad images are wired up after render instead.
 function wireImgFallback(host) {
   if (!host) return;
   host.querySelectorAll("img.js-img-fallback").forEach((img) => {
@@ -57,11 +55,12 @@ function switchTab(tab) {
   if (tab === "users") loadUsers();
   if (tab === "events") loadEvents();
   if (tab === "announcements") loadAnnouncements();
-  if (tab === "notifications") { /* form only */ }
   if (tab === "broadcast") loadBroadcastRuns();
   if (tab === "tests") loadThanksContent();
   if (tab === "executive" && me.role === "executive") loadExec();
   if (tab === "audit") loadAudit();
+  if (tab === "downtime") loadDowntime();
+  if (tab === "analytics") loadAnalytics();
 }
 
 /* ========================== ADS ========================== */
@@ -103,17 +102,16 @@ async function loadAds() {
     loadHouseAds();
   } catch (e) { host.innerHTML = `<p style="color:var(--bad,#ff7a7a)">${esc(e.message)}</p>`; }
 }
-async function approveAd(id) { try { await api("/api/ads?action=approve", { method: "POST", body: { id } }); loadAds(); } catch (e) { alert(e.message); } };
-async function denyAd(id) { const reason = prompt("Reason for denial:"); if (!reason) return; try { await api("/api/ads?action=deny", { method: "POST", body: { id, reason } }); loadAds(); } catch (e) { alert(e.message); } };
+async function approveAd(id) { try { await api("/api/ads?action=approve", { method: "POST", body: { id } }); loadAds(); } catch (e) { alert(e.message); } }
+async function denyAd(id) { const reason = prompt("Reason for denial:"); if (!reason) return; try { await api("/api/ads?action=deny", { method: "POST", body: { id, reason } }); loadAds(); } catch (e) { alert(e.message); } }
 async function saveAdConfig() {
   const msg = $("adCfgMsg");
   try {
     await api("/api/ads?action=config", { method: "POST", body: { rotateSec: +$("adRotateSec").value, houseWeight: +$("adHouseWeight").value, advertiserWeight: +$("adAdvWeight").value } });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Rotation saved.</div>`;
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
-/* ---- House ads (Gatherly + ASB) ---- */
 let houseAdsCache = [];
 async function loadHouseAds() {
   const host = $("houseAdList");
@@ -123,7 +121,7 @@ async function loadHouseAds() {
     const d = await api("/api/admin?action=house-ads");
     const ads = d.houseAds || [];
     houseAdsCache = ads;
-    if (!ads.length) { host.innerHTML = `<p style="color:var(--muted)">No house ads yet. Add one on the right.</p>`; return; }
+    if (!ads.length) { host.innerHTML = `<p style="color:var(--muted)">No house ads yet.</p>`; return; }
     host.innerHTML = ads.map((a) => {
       const kindLabel = a.kind === "asb" ? "ASB Advertising" : "Gatherly";
       const off = a.enabled === false;
@@ -154,7 +152,7 @@ function clearHouseAd() {
   if ($("houseAdEnabled")) $("houseAdEnabled").checked = true;
   if ($("houseAdFormTitle")) $("houseAdFormTitle").textContent = "Add house ad";
   const msg = $("houseAdMsg"); if (msg) msg.innerHTML = "";
-};
+}
 
 function editHouseAd(adId) {
   const a = houseAdsCache.find((x) => x.id === adId);
@@ -168,7 +166,7 @@ function editHouseAd(adId) {
   if ($("houseAdEnabled")) $("houseAdEnabled").checked = a.enabled !== false;
   if ($("houseAdFormTitle")) $("houseAdFormTitle").textContent = "Edit house ad";
   const msg = $("houseAdMsg"); if (msg) msg.innerHTML = "";
-};
+}
 
 async function saveHouseAd() {
   const msg = $("houseAdMsg");
@@ -188,22 +186,18 @@ async function saveHouseAd() {
     clearHouseAd();
     loadHouseAds();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
 async function toggleHouseAd(id, currentlyOff) {
-  try {
-    await api("/api/admin?action=house-ad-save", { method: "POST", body: { id, enabled: currentlyOff } });
-    loadHouseAds();
-  } catch (e) { alert(e.message); }
-};
+  try { await api("/api/admin?action=house-ad-save", { method: "POST", body: { id, enabled: currentlyOff } }); loadHouseAds(); }
+  catch (e) { alert(e.message); }
+}
 
 async function deleteHouseAd(id) {
-  if (!confirm("Delete this house ad? This cannot be undone.")) return;
-  try {
-    await api("/api/admin?action=house-ad-delete", { method: "POST", body: { id } });
-    loadHouseAds();
-  } catch (e) { alert(e.message); }
-};
+  if (!confirm("Delete this house ad?")) return;
+  try { await api("/api/admin?action=house-ad-delete", { method: "POST", body: { id } }); loadHouseAds(); }
+  catch (e) { alert(e.message); }
+}
 
 /* ========================== NEWS ========================== */
 async function loadNews() {
@@ -212,7 +206,7 @@ async function loadNews() {
   host.innerHTML = `<p style="color:var(--muted)">Loading&hellip;</p>`;
   try {
     const { articles } = await api("/api/news?action=admin-list");
-    if (!articles.length) { host.innerHTML = `<p style="color:var(--muted)">No articles yet. Click "New article" to get started.</p>`; return; }
+    if (!articles.length) { host.innerHTML = `<p style="color:var(--muted)">No articles yet.</p>`; return; }
     host.innerHTML = articles.map((a) => `
       <div class="card" style="margin-bottom:8px;cursor:pointer" data-action="edit-news" data-id="${esc(a.id)}">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
@@ -231,7 +225,7 @@ function newArticle() {
   if ($("newsBody")) $("newsBody").innerHTML = "";
   if ($("newsPublished")) $("newsPublished").checked = false;
   const msg = $("newsMsg"); if (msg) msg.innerHTML = "";
-};
+}
 
 async function editNews(id) {
   try {
@@ -248,9 +242,8 @@ async function editNews(id) {
     $("newsPublished").checked = Boolean(a.published);
     const msg = $("newsMsg"); if (msg) msg.innerHTML = "";
   } catch (e) { alert(e.message); }
-};
+}
 
-// Rebuild editor HTML from stored blocks (handles legacy text/heading/image blocks too).
 function blocksToHtml(blocks) {
   return blocks.map((b) => {
     if (b.type === "html") return b.value;
@@ -281,17 +274,15 @@ async function saveNews() {
     if (msg) msg.innerHTML = `<div class="alert alert-ok">${body.published ? "Saved and published" : "Saved as draft"}.</div>`;
     loadNews();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
 async function deleteNews() {
   const id = $("newsId").value;
   if (!id) return;
-  if (!confirm("Delete this article? This cannot be undone.")) return;
-  try {
-    await api("/api/news?action=delete", { method: "POST", body: { id } });
-    newArticle(); loadNews();
-  } catch (e) { alert(e.message); }
-};
+  if (!confirm("Delete this article?")) return;
+  try { await api("/api/news?action=delete", { method: "POST", body: { id } }); newArticle(); loadNews(); }
+  catch (e) { alert(e.message); }
+}
 
 /* ========================== CHECKLIST ========================== */
 const sevColor = (s) => (s === "high" ? "var(--bad,#ff7a7a)" : s === "warn" ? "var(--live,#ffb454)" : "var(--good,#69d99c)");
@@ -300,16 +291,13 @@ async function loadChecklist() {
     const d = await api("/api/admin?action=checklist");
     const t = $("checklistTime");
     if (t) t.textContent = `Last swept ${new Date(d.generatedAt).toLocaleTimeString()}`;
-
     const badge = $("checklistBadge");
     if (badge) { badge.textContent = d.pending || ""; badge.style.display = d.pending ? "" : "none"; }
-
     const sum = $("checklistSummary");
     if (sum) sum.innerHTML = (d.checklist || []).map((c) => `
       <div class="stat" style="border-left:3px solid ${sevColor(c.severity)}">
         <b>${c.count}</b><span>${esc(c.label)}</span>
       </div>`).join("");
-
     const flags = $("checklistFlags");
     if (flags) flags.innerHTML = (d.flags || []).length ? d.flags.map((f) => `
       <div class="card" style="margin-bottom:8px;border-left:3px solid var(--bad,#ff7a7a)">
@@ -325,8 +313,7 @@ async function loadChecklist() {
             <button class="btn btn-ghost btn-sm" data-action="escalate-flag" data-key="${esc(f.key)}">Escalate</button>
           </div>
         </div>
-      </div>`).join("") : `<p style="color:var(--muted)">No security flags this week. All clear.</p>`;
-
+      </div>`).join("") : `<p style="color:var(--muted)">No security flags this week.</p>`;
     const tk = $("checklistTickets");
     if (tk) tk.innerHTML = (d.tickets || []).length ? d.tickets.map((t) => `
       <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer" data-action="goto-support">
@@ -345,11 +332,11 @@ async function loadChecklist() {
 async function resolveFlag(key, btn) {
   try { await api("/api/admin?action=resolve-flag", { method: "POST", body: { key } }); if (btn) btn.closest(".card").style.opacity = ".4"; loadChecklist(); }
   catch (e) { alert(e.message); }
-};
+}
 async function escalateFlag(key, btn) {
   try { await api("/api/admin?action=escalate-flag", { method: "POST", body: { key } }); if (btn) { btn.textContent = "Escalated"; btn.disabled = true; } }
   catch (e) { alert(e.message); }
-};
+}
 
 /* ========================== SUPPORT ========================== */
 async function loadTickets() {
@@ -415,27 +402,11 @@ function openTicket(id, t) {
 }
 
 async function refreshOpenTicket(id) {
-  try {
-    const { ticket } = await api(`/api/tickets?action=get&id=${encodeURIComponent(id)}`);
-    openTicket(id, ticket);
-  } catch {}
+  try { const { ticket } = await api(`/api/tickets?action=get&id=${encodeURIComponent(id)}`); openTicket(id, ticket); } catch {}
   loadTickets();
 }
-
-async function claimTicket(id) {
-  try {
-    await api(`/api/tickets?action=assign&id=${encodeURIComponent(id)}`, { method: "POST" });
-    await refreshOpenTicket(id);
-  } catch (e) { alert(e.message); }
-};
-
-async function unclaimTicket(id) {
-  try {
-    await api(`/api/tickets?action=unassign&id=${encodeURIComponent(id)}`, { method: "POST" });
-    await refreshOpenTicket(id);
-  } catch (e) { alert(e.message); }
-};
-
+async function claimTicket(id) { try { await api(`/api/tickets?action=assign&id=${encodeURIComponent(id)}`, { method: "POST" }); await refreshOpenTicket(id); } catch (e) { alert(e.message); } }
+async function unclaimTicket(id) { try { await api(`/api/tickets?action=unassign&id=${encodeURIComponent(id)}`, { method: "POST" }); await refreshOpenTicket(id); } catch (e) { alert(e.message); } }
 async function sendStaffReply(id) {
   const text = $("staffReply")?.value?.trim();
   const msg = $("ticketMsg");
@@ -446,8 +417,7 @@ async function sendStaffReply(id) {
     if ($("staffReply")) $("staffReply").value = "";
     loadTickets();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
-
+}
 async function closeTicket(id) {
   const msg = $("ticketMsg");
   try {
@@ -457,7 +427,7 @@ async function closeTicket(id) {
     const host = $("ticketDetail");
     if (host) host.innerHTML = "";
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
 /* ========================== USERS ========================== */
 async function loadUsers(q = "") {
@@ -492,7 +462,6 @@ function openUser(id, u) {
   const avatarHtml = u.avatar && u.discordId
     ? `<img src="https://cdn.discordapp.com/avatars/${esc(u.discordId)}/${esc(u.avatar)}.png?size=128" style="width:52px;height:52px;border-radius:50%" class="js-img-fallback">`
     : `<span style="width:52px;height:52px;border-radius:50%;background:var(--signal-deep);display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;color:#fff">${esc((u.username || "?")[0].toUpperCase())}</span>`;
-
   host.innerHTML = `
     <div class="card" style="margin-top:16px">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
@@ -504,7 +473,6 @@ function openUser(id, u) {
           <div style="font-size:.78rem;color:var(--muted);font-family:monospace">${esc(u.id)}</div>
         </div>
       </div>
-
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
         <select id="editPlan" class="input" style="flex:1;min-width:140px">
           <option value="free" ${u.plan === "free" ? "selected" : ""}>Gatherly (Free)</option>
@@ -513,23 +481,20 @@ function openUser(id, u) {
         </select>
         <button class="btn btn-ghost btn-sm" data-action="set-plan" data-id="${esc(id)}">Set plan</button>
       </div>
-
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <input id="creditAmt" type="number" min="0" class="input" placeholder="Credits" style="width:100px">
         <button class="btn btn-ghost btn-sm" data-action="adjust-credits" data-id="${esc(id)}" data-credit-action="credits-add">Add</button>
         <button class="btn btn-ghost btn-sm" data-action="adjust-credits" data-id="${esc(id)}" data-credit-action="credits-remove">Remove</button>
         <button class="btn btn-ghost btn-sm" data-action="adjust-credits" data-id="${esc(id)}" data-credit-action="credits-set">Set</button>
       </div>
-
       <div style="margin-bottom:10px">
-        <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Listing cap: <b>${u.effectiveCap === Infinity || u.effectiveCap === null ? "unlimited" : esc(String(u.effectiveCap))}</b> ${u.listingCapOverride !== null && u.listingCapOverride !== undefined ? `(override, plan default ${esc(String(u.planCapDefault))})` : `(plan default)`}</div>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Listing cap: <b>${u.effectiveCap === Infinity || u.effectiveCap === null ? "unlimited" : esc(String(u.effectiveCap))}</b></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <input id="listingCapAmt" type="number" min="0" class="input" placeholder="Max listings" style="width:120px">
           <button class="btn btn-ghost btn-sm" data-action="set-listing-cap" data-id="${esc(id)}">Set cap</button>
           <button class="btn btn-ghost btn-sm" data-action="set-listing-cap" data-id="${esc(id)}" data-reset="true">Reset to plan</button>
         </div>
       </div>
-
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <button class="btn btn-ghost btn-sm" data-action="toggle-suspend" data-id="${esc(id)}" data-suspend="${!u.suspended}">${u.suspended ? "Unsuspend" : "Suspend"}</button>
         <button class="btn btn-ghost btn-sm" data-action="wipe-listings" data-id="${esc(id)}">Wipe listings</button>
@@ -537,7 +502,6 @@ function openUser(id, u) {
           ? `<button class="btn btn-ghost btn-sm" data-action="remove-blacklist" data-id="${esc(id)}">Remove blacklist</button>`
           : `<button class="btn btn-ghost btn-sm" data-action="add-blacklist" data-id="${esc(id)}">Blacklist support</button>`}
       </div>
-
       ${isExec ? `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <select id="editRole" class="input" style="flex:1;min-width:140px">
@@ -550,7 +514,6 @@ function openUser(id, u) {
       <div style="margin-bottom:10px">
         <button class="btn btn-sm" style="background:var(--red,#ff7a7a);color:#fff" data-action="delete-account" data-id="${esc(id)}" data-username="${esc(u.username)}">Delete account</button>
       </div>` : ""}
-
       <div id="userMsg" style="margin-top:10px"></div>
     </div>`;
   wireImgFallback(host);
@@ -559,79 +522,54 @@ function openUser(id, u) {
 async function setPlan(id) {
   const plan = $("editPlan")?.value;
   const msg = $("userMsg");
-  try {
-    await api("/api/admin?action=set-plan", { method: "POST", body: { userId: id, plan } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Plan updated to ${esc(plan)}.</div>`;
-    loadUsers();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { await api("/api/admin?action=set-plan", { method: "POST", body: { userId: id, plan } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Plan updated to ${esc(plan)}.</div>`; loadUsers(); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 async function adjustCredits(id, action) {
   const amount = parseInt($("creditAmt")?.value, 10);
   const msg = $("userMsg");
   if (!Number.isFinite(amount)) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter a valid number.</div>`; return; }
-  try {
-    const d = await api(`/api/admin?action=${action}`, { method: "POST", body: { userId: id, amount } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Credits updated. New total: ${d.credits}</div>`;
-    loadUsers();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { const d = await api(`/api/admin?action=${action}`, { method: "POST", body: { userId: id, amount } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Credits updated. New total: ${d.credits}</div>`; loadUsers(); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 async function setListingCap(id, reset) {
   const msg = $("userMsg");
   const body = { userId: id };
   if (reset) { body.reset = true; }
-  else {
-    const v = $("listingCapAmt")?.value;
-    if (v === "" || v === undefined) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter a cap, or use Reset to plan.</div>`; return; }
-    body.cap = v;
-  }
-  try {
-    const d = await api("/api/admin?action=set-listing-cap", { method: "POST", body });
-    const capText = d.effectiveCap === null || d.effectiveCap === undefined ? "unlimited" : d.effectiveCap;
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Listing cap ${reset ? "reset to plan default" : "updated"}. Effective cap: ${esc(String(capText))}.</div>`;
-    loadUsers();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  else { const v = $("listingCapAmt")?.value; if (v === "" || v === undefined) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter a cap or reset.</div>`; return; } body.cap = v; }
+  try { const d = await api("/api/admin?action=set-listing-cap", { method: "POST", body }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Listing cap updated.</div>`; loadUsers(); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 async function toggleSuspend(id, suspend) {
   const reason = suspend ? (prompt("Reason for suspension (optional):") || "") : "";
   const msg = $("userMsg");
-  try {
-    await api("/api/admin?action=suspend", { method: "POST", body: { userId: id, suspended: suspend, reason } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">${suspend ? "Suspended" : "Unsuspended"}.</div>`;
-    loadUsers();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { await api("/api/admin?action=suspend", { method: "POST", body: { userId: id, suspended: suspend, reason } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">${suspend ? "Suspended" : "Unsuspended"}.</div>`; loadUsers(); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 async function wipeListings(id) {
-  if (!confirm("Wipe all event listings for this user? This cannot be undone.")) return;
+  if (!confirm("Wipe all event listings for this user?")) return;
   const msg = $("userMsg");
-  try {
-    const d = await api("/api/admin?action=wipe-listings", { method: "POST", body: { userId: id } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">${d.removed} listing(s) removed.</div>`;
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { const d = await api("/api/admin?action=wipe-listings", { method: "POST", body: { userId: id } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">${d.removed} listing(s) removed.</div>`; }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 async function addBlacklist(id) {
   const reason = prompt("Reason for support blacklist:");
   if (!reason) return;
   const msg = $("userMsg");
-  try {
-    await api("/api/admin?action=blacklist-add", { method: "POST", body: { userId: id, reason } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">User blacklisted from support.</div>`;
-    loadUsers();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { await api("/api/admin?action=blacklist-add", { method: "POST", body: { userId: id, reason } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">User blacklisted from support.</div>`; loadUsers(); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 async function removeBlacklist(id) {
   const msg = $("userMsg");
-  try {
-    await api("/api/admin?action=blacklist-remove", { method: "POST", body: { userId: id } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Blacklist removed.</div>`;
-    loadUsers();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { await api("/api/admin?action=blacklist-remove", { method: "POST", body: { userId: id } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Blacklist removed.</div>`; loadUsers(); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 async function setRole(id) {
   const role = $("editRole")?.value || null;
@@ -639,24 +577,19 @@ async function setRole(id) {
   try {
     const d = await api("/api/admin?action=set-role", { method: "POST", body: { userId: id, role } });
     if (msg) msg.innerHTML = d.pending
-      ? `<div class="alert alert-ok">Request sent for approval. The role will not change until accepted via the Discord DM.</div>`
+      ? `<div class="alert alert-ok">Request sent for approval via Discord DM.</div>`
       : `<div class="alert alert-ok">Role updated.</div>`;
     loadUsers();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
 async function deleteAccount(id, username) {
-  if (!confirm(`Permanently delete the account for "${username}"? This will also wipe all their event listings and cannot be undone.`)) return;
+  if (!confirm(`Permanently delete the account for "${username}"?`)) return;
   if (!confirm("Are you absolutely sure? This action is irreversible.")) return;
   const msg = $("userMsg");
-  try {
-    const d = await api("/api/admin?action=delete-account", { method: "POST", body: { userId: id } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Account deleted. ${d.eventsRemoved} event(s) removed.</div>`;
-    const host = $("userDetail");
-    if (host) host.innerHTML = "";
-    loadUsers();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { const d = await api("/api/admin?action=delete-account", { method: "POST", body: { userId: id } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Account deleted. ${d.eventsRemoved} event(s) removed.</div>`; const host = $("userDetail"); if (host) host.innerHTML = ""; loadUsers(); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 /* ========================== EVENTS ========================== */
 async function loadEvents() {
@@ -685,19 +618,9 @@ async function loadEvents() {
 async function adminBoost(id, btn) {
   try { const d = await api("/api/admin?action=boost", { method: "POST", body: { id } }); btn.textContent = d.boosted ? "Unboost" : "Boost"; }
   catch (e) { alert(e.message); }
-};
-
-async function adminEndEvent(id) {
-  if (!confirm("Force-end this event?")) return;
-  try { await api("/api/admin?action=end-event", { method: "POST", body: { id } }); loadEvents(); }
-  catch (e) { alert(e.message); }
-};
-
-async function adminDeleteEvent(id) {
-  if (!confirm("Permanently delete this event?")) return;
-  try { await api("/api/admin?action=delete-event", { method: "POST", body: { id } }); loadEvents(); }
-  catch (e) { alert(e.message); }
-};
+}
+async function adminEndEvent(id) { if (!confirm("Force-end this event?")) return; try { await api("/api/admin?action=end-event", { method: "POST", body: { id } }); loadEvents(); } catch (e) { alert(e.message); } }
+async function adminDeleteEvent(id) { if (!confirm("Permanently delete this event?")) return; try { await api("/api/admin?action=delete-event", { method: "POST", body: { id } }); loadEvents(); } catch (e) { alert(e.message); } }
 
 /* ========================== ANNOUNCEMENTS ========================== */
 async function loadAnnouncements() {
@@ -725,19 +648,18 @@ async function addAnnounce() {
   const durationMin = $("announceDuration")?.value;
   const msg = $("announceMsg");
   if (!text) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter announcement text.</div>`; return; }
-  if (ctaText && !ctaLink) { if (msg) msg.innerHTML = `<div class="alert alert-err">Add a link for the CTA button.</div>`; return; }
   try {
     await api("/api/admin?action=announce-add", { method: "POST", body: { text, link, ctaText, ctaLink, durationMin } });
     ["announceText", "announceLink", "announceCtaText", "announceCtaLink"].forEach((k) => { if ($(k)) $(k).value = ""; });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Announcement added.</div>`;
     loadAnnouncements();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
 async function removeAnnounce(id) {
   try { await api("/api/admin?action=announce-remove", { method: "POST", body: { id } }); loadAnnouncements(); }
   catch (e) { alert(e.message); }
-};
+}
 
 /* ========================== NOTIFICATIONS ========================== */
 async function addNotification() {
@@ -754,9 +676,9 @@ async function addNotification() {
     ["notifyTitle", "notifyBody", "notifyImage", "notifyLink"].forEach((k) => { if ($(k)) $(k).value = ""; });
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Notification sent to all users.</div>`;
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
-/* ========================== BROADCAST (Discord DM blast) ========================== */
+/* ========================== BROADCAST ========================== */
 function broadcastFormInput() {
   return {
     title: $("bcastTitle")?.value?.trim() || "",
@@ -779,10 +701,8 @@ function previewBroadcast() {
       ${f.body ? `<div style="color:var(--muted);white-space:pre-wrap;margin-bottom:10px">${esc(f.body)}</div>` : ""}
       ${f.image ? `<img src="${esc(f.image)}" class="js-img-fallback" style="max-width:100%;border-radius:8px;margin-bottom:10px">` : ""}
       <hr style="border-color:rgba(255,255,255,.08);margin:10px 0">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">© Gatherly ${new Date().getFullYear()} | ER:LC Events &amp; Analytics</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${hasChangeLog ? `<span class="btn btn-secondary btn-sm" style="pointer-events:none">${esc(f.changeLogText || "View Full Change Log")} ↗</span>` : ""}
-        <span class="btn btn-secondary btn-sm" style="pointer-events:none">Unsubscribe from Product Updates ↗</span>
       </div>
     </div>`;
   wireImgFallback(host);
@@ -795,39 +715,31 @@ async function testBroadcast() {
   if (!f.title) { if (msg) msg.innerHTML = `<div class="alert alert-err">Title is required.</div>`; return; }
   if (!testDiscordId) { if (msg) msg.innerHTML = `<div class="alert alert-err">Enter your Discord user ID first.</div>`; return; }
   if (msg) msg.innerHTML = `<div style="color:var(--muted)">Sending test DM&hellip;</div>`;
-  try {
-    await api("/api/broadcast?action=test", { method: "POST", body: { ...f, testDiscordId } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Test DM sent. Check your Discord DMs.</div>`;
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+  try { await api("/api/broadcast?action=test", { method: "POST", body: { ...f, testDiscordId } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Test DM sent. Check your Discord DMs.</div>`; }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 }
 
 async function testPurchaseThanks() {
   const kind = $("thanksTestKind")?.value || "plan";
   const msg = $("thanksTestMsg");
   const body = kind === "credits" ? { kind, credits: parseInt($("thanksTestCredits")?.value, 10) || 6 } : { kind };
-  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Sending thank-you DM, receipt, and channel announcement&hellip;</div>`;
-  try {
-    await api("/api/billing?action=test-purchase-thanks", { method: "POST", body });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Sent. Check your Discord DMs (thank-you + receipt) and the supporters channel.</div>`;
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Sending&hellip;</div>`;
+  try { await api("/api/billing?action=test-purchase-thanks", { method: "POST", body }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Sent. Check your Discord DMs.</div>`; }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 }
 
 async function testLiveCard() {
   const msg = $("liveCardTestMsg");
   if (msg) msg.innerHTML = `<div style="color:var(--muted)">Posting test card&hellip;</div>`;
-  try {
-    await api("/api/admin?action=test-live-card", { method: "POST" });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Posted. Check the live-notify channel.</div>`;
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+  try { await api("/api/admin?action=test-live-card", { method: "POST" }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Posted. Check the live-notify channel.</div>`; }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 }
 
 async function testStatusRefresh() {
   const msg = $("statusTestMsg");
   if (msg) msg.innerHTML = `<div style="color:var(--muted)">Refreshing&hellip;</div>`;
-  try {
-    await api("/api/admin?action=test-status-refresh", { method: "POST" });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Done. Check the status channel.</div>`;
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+  try { await api("/api/admin?action=test-status-refresh", { method: "POST" }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Done. Check the status channel.</div>`; }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 }
 
 async function loadThanksContent() {
@@ -849,31 +761,22 @@ async function saveThanksContent() {
     footerBannerUrl: $("thanksFooterBanner")?.value?.trim() || "",
     receiptFooterNote: $("thanksReceiptFooter")?.value?.trim() || "",
   };
-  try {
-    await api("/api/admin?action=purchase-thanks-content-save", { method: "POST", body });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Saved.</div>`;
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+  try { await api("/api/admin?action=purchase-thanks-content-save", { method: "POST", body }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Saved.</div>`; }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 }
 
 async function sendBroadcast() {
   const f = broadcastFormInput();
   const msg = $("bcastSendMsg");
   if (!f.title) { if (msg) msg.innerHTML = `<div class="alert alert-err">Title is required.</div>`; return; }
-
-  // First confirmation: plain.
-  if (!confirm("Send this Discord DM to every Gatherly member with a linked account? Test it on yourself first if you have not already.")) return;
-  // Second confirmation: deliberately scarier, per the danger of mass-DMing the whole user base.
-  const phrase = prompt('This cannot be undone once sent. Type "NOTIFY EVERYONE" exactly to confirm you want to notify every Gatherly member:');
-  if (phrase !== "NOTIFY EVERYONE") {
-    if (msg) msg.innerHTML = `<div class="alert alert-err">Cancelled, the confirmation phrase did not match.</div>`;
-    return;
-  }
-
-  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Sending to every connected user, this may take a moment&hellip;</div>`;
+  if (!confirm("Send this Discord DM to every Gatherly member?")) return;
+  const phrase = prompt('Type "NOTIFY EVERYONE" exactly to confirm:');
+  if (phrase !== "NOTIFY EVERYONE") { if (msg) msg.innerHTML = `<div class="alert alert-err">Cancelled.</div>`; return; }
+  if (msg) msg.innerHTML = `<div style="color:var(--muted)">Sending&hellip;</div>`;
   try {
     const d = await api("/api/broadcast?action=send", { method: "POST", body: { ...f, confirm: true } });
     const r = d.run;
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Sent to ${r.sent} of ${r.total} users (${r.skipped} unsubscribed, ${r.failed} failed).</div>`;
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">Sent to ${r.sent} of ${r.total} users.</div>`;
     loadBroadcastRuns();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
 }
@@ -893,7 +796,7 @@ async function loadBroadcastRuns() {
           <strong>${esc(r.title)}</strong>
           <span style="color:var(--muted);font-size:13px">${new Date(r.at).toLocaleString()}</span>
         </div>
-        <div style="color:var(--muted);font-size:13px;margin-top:4px">by ${esc(r.by)} · sent ${r.sent}/${r.total} · ${r.skipped} unsubscribed · ${r.failed} failed</div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px">by ${esc(r.by)} · sent ${r.sent}/${r.total}</div>
       </div>`).join("");
   } catch (e) { host.innerHTML = `<p style="color:var(--bad,#ff7a7a)">${esc(e.message)}</p>`; }
 }
@@ -908,7 +811,7 @@ async function claimExec() {
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Executive access unlocked. Reloading...</div>`;
     setTimeout(() => location.reload(), 900);
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
 async function loadExec() {
   if (me.role !== "executive") return;
@@ -924,14 +827,13 @@ async function loadExec() {
           return `
           <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px;opacity:${dead ? ".5" : "1"}">
             <code style="flex:1;font-size:.82rem">${esc(c.fingerprint)}</code>
-            <span style="font-size:.74rem;color:var(--muted)">${esc(c.role)} · ${esc(status)}${c.redemptions ? ` · ${c.redemptions} used` : ""}</span>
+            <span style="font-size:.74rem;color:var(--muted)">${esc(c.role)} · ${esc(status)}</span>
             ${!dead ? `<button class="btn btn-ghost btn-sm" data-action="revoke-code" data-key="${esc(c.key)}">Revoke</button>` : ""}
           </div>`;
         }).join("")
-        : `<p style="color:var(--muted)">No codes generated yet. Codes are shown once at generation and stored hashed.</p>`;
+        : `<p style="color:var(--muted)">No codes generated yet.</p>`;
     }
   } catch {}
-
   try {
     const d = await api("/api/admin?action=content");
     const content = d.content || {};
@@ -948,81 +850,47 @@ async function genCode() {
     if (msg) msg.innerHTML = `<div class="alert alert-ok">Admin code (copy now, shown once, expires ${new Date(d.expiresAt).toLocaleTimeString()}):<br><code style="font-size:1rem;user-select:all">${esc(d.code)}</code></div>`;
     loadExec();
   } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+}
 
 async function revokeCode(key) {
   if (!confirm("Revoke this code?")) return;
   const msg = $("execMsg");
-  try {
-    await api("/api/admin?action=revoke-code", { method: "POST", body: { key } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Code revoked.</div>`;
-    loadExec();
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { await api("/api/admin?action=revoke-code", { method: "POST", body: { key } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Code revoked.</div>`; loadExec(); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 async function saveContent() {
   const heroHeadlineMain = $("heroHeadlineMain")?.value?.trim();
   const heroHeadlineAccent = $("heroHeadlineAccent")?.value?.trim();
   const heroSub = $("heroSub")?.value?.trim();
   const msg = $("execMsg");
-  try {
-    await api("/api/admin?action=set-content", { method: "POST", body: { heroHeadlineMain, heroHeadlineAccent, heroSub } });
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">Homepage content updated.</div>`;
-  } catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
-};
+  try { await api("/api/admin?action=set-content", { method: "POST", body: { heroHeadlineMain, heroHeadlineAccent, heroSub } }); if (msg) msg.innerHTML = `<div class="alert alert-ok">Homepage content updated.</div>`; }
+  catch (e) { if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`; }
+}
 
 /* ========================== AUDIT LOG ========================== */
 const ACTION_LABELS = {
-  "ticket.create": "Opened a support ticket",
-  "ticket.staff-reply": "Replied to a ticket",
-  "ticket.claim": "Claimed a ticket",
-  "ticket.unclaim": "Unclaimed a ticket",
-  "ticket.close": "Closed a ticket",
-  "ticket.reopen": "Reopened a ticket",
-  "ticket.escalate": "Escalated a ticket",
-  "ad.submit": "Submitted an advertisement",
-  "ad.approve": "Approved an advertisement",
-  "ad.deny": "Denied an advertisement",
-  "ad.config": "Updated ad rotation settings",
-  "ads.house-create": "Created a house ad",
-  "ads.house-update": "Updated a house ad",
-  "ads.house-delete": "Deleted a house ad",
-  "news.create": "Created a news article",
-  "news.update": "Updated a news article",
-  "news.delete": "Deleted a news article",
-  "announce.add": "Added an announcement",
-  "announce.remove": "Removed an announcement",
-  "notify.add": "Sent a notification",
-  "notify.remove": "Removed a notification",
-  "broadcast.send": "Sent a Discord DM broadcast",
-  "broadcast.test": "Sent a Discord DM broadcast test",
-  "broadcast.unsubscribe": "A user unsubscribed from DM broadcasts",
-  "broadcast.resubscribe": "A user resubscribed to DM broadcasts",
-  "user.set-plan": "Changed a user's plan",
-  "user.set-role": "Changed a user's staff role",
-  "user.set-listing-cap": "Changed a user's listing cap",
-  "user.suspend": "Suspended a user",
-  "user.unsuspend": "Unsuspended a user",
-  "user.delete-account": "Deleted a user account",
-  "user.wipe-listings": "Wiped a user's listings",
-  "support.blacklist-add": "Blacklisted a user from support",
-  "support.blacklist-remove": "Removed a support blacklist",
-  "credits-add": "Added credits",
-  "credits-remove": "Removed credits",
-  "credits-set": "Set credits",
-  "code.generate": "Generated an admin code",
-  "code.revoke": "Revoked an admin code",
-  "code.redeem-success": "Redeemed an access code",
-  "code.redeem-failed": "Failed access code redemption",
-  "exec.claim-success": "Unlocked executive access",
-  "exec.claim-failed": "Failed executive access attempt",
-  "site.content-update": "Updated homepage content",
-  "event.boost": "Boosted an event",
-  "event.unboost": "Unboosted an event",
-  "event.end": "Ended an event early",
-  "event.delete": "Deleted an event",
-  "watchdog.resolve": "Resolved a security flag",
-  "watchdog.escalate": "Escalated a security flag",
+  "ticket.create": "Opened a support ticket", "ticket.staff-reply": "Replied to a ticket",
+  "ticket.claim": "Claimed a ticket", "ticket.unclaim": "Unclaimed a ticket",
+  "ticket.close": "Closed a ticket", "ticket.reopen": "Reopened a ticket",
+  "ticket.escalate": "Escalated a ticket", "ad.submit": "Submitted an advertisement",
+  "ad.approve": "Approved an advertisement", "ad.deny": "Denied an advertisement",
+  "ad.config": "Updated ad rotation settings", "ads.house-create": "Created a house ad",
+  "ads.house-update": "Updated a house ad", "ads.house-delete": "Deleted a house ad",
+  "news.create": "Created a news article", "news.update": "Updated a news article",
+  "news.delete": "Deleted a news article", "announce.add": "Added an announcement",
+  "announce.remove": "Removed an announcement", "notify.add": "Sent a notification",
+  "broadcast.send": "Sent a Discord DM broadcast", "broadcast.test": "Sent a broadcast test",
+  "user.set-plan": "Changed a user's plan", "user.set-role": "Changed a user's staff role",
+  "user.suspend": "Suspended a user", "user.unsuspend": "Unsuspended a user",
+  "user.delete-account": "Deleted a user account", "user.wipe-listings": "Wiped a user's listings",
+  "support.blacklist-add": "Blacklisted a user from support", "support.blacklist-remove": "Removed a support blacklist",
+  "credits-add": "Added credits", "credits-remove": "Removed credits", "credits-set": "Set credits",
+  "code.generate": "Generated an admin code", "code.revoke": "Revoked an admin code",
+  "site.content-update": "Updated homepage content", "event.boost": "Boosted an event",
+  "event.end": "Ended an event early", "event.delete": "Deleted an event",
+  "watchdog.resolve": "Resolved a security flag", "watchdog.escalate": "Escalated a security flag",
+  "downtime.enable": "Enabled downtime mode", "downtime.disable": "Disabled downtime mode",
 };
 const describeAction = (action) => ACTION_LABELS[action] || action;
 
@@ -1030,14 +898,8 @@ const DETAIL_PRIORITY = ["targetUsername", "ticketUser", "subject", "title", "ad
 const DETAIL_HIDE = new Set(["watchdog", "diagnosis", "fix", "aiResolution", "ip", "path", "targetId", "ticketId", "adId", "eventId", "id", "key"]);
 function detailLine(detail = {}) {
   const parts = [];
-  DETAIL_PRIORITY.forEach((k) => {
-    if (detail[k] !== undefined && detail[k] !== null && detail[k] !== "") parts.push(`${k === "targetUsername" || k === "ticketUser" ? "user" : k}: ${detail[k]}`);
-  });
-  Object.entries(detail).forEach(([k, v]) => {
-    if (DETAIL_HIDE.has(k) || DETAIL_PRIORITY.includes(k)) return;
-    if (v === null || v === undefined || v === "" || typeof v === "object") return;
-    parts.push(`${k}: ${v}`);
-  });
+  DETAIL_PRIORITY.forEach((k) => { if (detail[k] !== undefined && detail[k] !== null && detail[k] !== "") parts.push(`${k === "targetUsername" || k === "ticketUser" ? "user" : k}: ${detail[k]}`); });
+  Object.entries(detail).forEach(([k, v]) => { if (DETAIL_HIDE.has(k) || DETAIL_PRIORITY.includes(k)) return; if (v === null || v === undefined || v === "" || typeof v === "object") return; parts.push(`${k}: ${v}`); });
   return parts.join(" - ");
 }
 
@@ -1057,10 +919,99 @@ async function loadAudit() {
         </div>
         <div style="color:var(--muted);margin-top:2px">${esc(e.actor?.username || "system")}${e.actor?.role ? ` (${esc(e.actor.role)})` : ""}</div>
         ${detailLine(e.detail) ? `<div style="margin-top:4px">${esc(detailLine(e.detail))}</div>` : ""}
-        ${e.detail?.diagnosis ? `<div style="margin-top:4px;color:var(--yellow,#ffcf5c)">${esc(e.detail.diagnosis)}</div>` : ""}
-        ${e.detail?.fix ? `<div style="color:var(--muted)">${esc(e.detail.fix)}</div>` : ""}
       </div>`).join("");
   } catch (e) { host.innerHTML = `<p style="color:var(--red,#ff7a7a)">${esc(e.message)}</p>`; }
+}
+
+/* ========================== DOWNTIME ========================== */
+async function loadDowntime() {
+  try {
+    const { downtime } = await api("/api/admin?action=downtime-get");
+    const status = $("dtStatus");
+    const msgEl = $("dtMessage");
+    const urlEl = $("dtDiscordUrl");
+    if (status) {
+      if (downtime?.active) {
+        status.style.cssText = "margin-bottom:20px;padding:12px 16px;border-radius:10px;background:rgba(255,122,122,.08);border:1px solid rgba(255,122,122,.2);color:#ff7a7a;font-weight:600;";
+        status.textContent = `DOWNTIME ACTIVE - enabled by ${downtime.setBy || "unknown"} at ${new Date(downtime.setAt || Date.now()).toLocaleString()}`;
+      } else {
+        status.style.cssText = "margin-bottom:20px;padding:12px 16px;border-radius:10px;background:rgba(105,217,156,.08);border:1px solid rgba(105,217,156,.2);color:#69d99c;font-weight:600;";
+        status.textContent = "Site is live - no downtime active.";
+      }
+    }
+    if (msgEl && downtime?.message) msgEl.value = downtime.message;
+    if (urlEl && downtime?.discordUrl) urlEl.value = downtime.discordUrl;
+  } catch (e) { console.error("Downtime load error:", e); }
+}
+
+async function setDowntime(active) {
+  const message = $("dtMessage")?.value?.trim();
+  const discordUrl = $("dtDiscordUrl")?.value?.trim();
+  const msg = $("dtMsg");
+  try {
+    await api("/api/admin?action=downtime-set", { method: "POST", body: { active, message, discordUrl } });
+    await loadDowntime();
+    if (msg) msg.innerHTML = `<div class="alert alert-ok">${active ? "Downtime mode enabled. All pages now show the maintenance overlay." : "Downtime mode disabled. Site is back online."}</div>`;
+  } catch (e) {
+    if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`;
+  }
+}
+
+/* ========================== ANALYTICS ========================== */
+async function loadAnalytics() {
+  const days = $("analyticsDays")?.value || 7;
+  try {
+    const { analytics } = await api(`/api/admin?action=analytics-get&days=${days}`);
+    if (!analytics?.length) return;
+
+    const totals = analytics.reduce((acc, d) => {
+      acc.views += d.totalViews || 0;
+      acc.visitors += d.uniqueVisitors || 0;
+      acc.clicks += d.totalClicks || 0;
+      return acc;
+    }, { views: 0, visitors: 0, clicks: 0 });
+
+    const statsEl = $("analyticsStats");
+    if (statsEl) statsEl.innerHTML = [
+      ["Total page views", totals.views.toLocaleString()],
+      ["Unique visitors", totals.visitors.toLocaleString()],
+      ["Total clicks", totals.clicks.toLocaleString()],
+      ["Days tracked", analytics.length],
+    ].map(([label, value]) => `
+      <div class="card" style="padding:16px 20px">
+        <div style="font-size:1.8rem;font-weight:700;color:var(--signal)">${value}</div>
+        <div style="font-size:.82rem;color:var(--muted);margin-top:4px">${label}</div>
+      </div>`).join("");
+
+    const chartEl = $("analyticsChart");
+    if (chartEl) {
+      const maxViews = Math.max(...analytics.map(d => d.totalViews || 0), 1);
+      chartEl.innerHTML = [...analytics].reverse().map(d => {
+        const h = Math.max(4, Math.round(((d.totalViews || 0) / maxViews) * 120));
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:28px;flex:1">
+          <span style="font-size:.62rem;color:var(--muted)">${d.totalViews || 0}</span>
+          <div style="width:100%;height:${h}px;background:var(--signal);border-radius:4px 4px 0 0;opacity:.8" title="${d.date}: ${d.totalViews || 0} views"></div>
+          <span style="font-size:.6rem;color:var(--faint);writing-mode:vertical-lr;transform:rotate(180deg);white-space:nowrap">${d.date.slice(5)}</span>
+        </div>`;
+      }).join("");
+    }
+
+    const pageMap = {};
+    analytics.forEach(d => {
+      (d.topPages || []).forEach(({ page, views }) => { pageMap[page] = (pageMap[page] || 0) + views; });
+    });
+    const topPages = Object.entries(pageMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const tpEl = $("analyticsTopPages")?.querySelector("tbody");
+    if (tpEl) tpEl.innerHTML = topPages.length
+      ? topPages.map(([page, views]) => `<tr><td>${esc(page)}</td><td>${views.toLocaleString()}</td></tr>`).join("")
+      : `<tr><td colspan="2" style="color:var(--muted)">No data yet.</td></tr>`;
+
+    const allErrors = analytics.flatMap(d => d.recentErrors || []).slice(-20).reverse();
+    const errEl = $("analyticsErrors");
+    if (errEl) errEl.innerHTML = allErrors.length
+      ? allErrors.map(e => `<div style="padding:8px 0;border-bottom:1px solid var(--line)"><code style="color:#ff7a7a">${esc(e.page || "/")}</code> - ${esc(e.msg || "Unknown error")} <span style="color:var(--faint);font-size:.75rem">${new Date(e.at).toLocaleString()}</span></div>`).join("")
+      : "No errors logged.";
+  } catch (e) { console.error("Analytics load error:", e); }
 }
 
 /* ========================== USER SEARCH ========================== */
@@ -1079,7 +1030,6 @@ function initRichText() {
   const editor = $("newsBody");
   if (!toolbar || !editor) return;
   const exec = (cmd, val = null) => { editor.focus(); document.execCommand(cmd, false, val); };
-
   toolbar.querySelectorAll(".rt-btn").forEach((btn) => {
     btn.addEventListener("mousedown", (e) => e.preventDefault());
     btn.addEventListener("click", () => {
@@ -1087,34 +1037,18 @@ function initRichText() {
       else if (btn.dataset.align) exec("justify" + btn.dataset.align.charAt(0).toUpperCase() + btn.dataset.align.slice(1));
     });
   });
-
   const rtLink = $("rtLink");
-  if (rtLink) rtLink.addEventListener("click", () => {
-    const url = prompt("Link URL (https://...):");
-    if (url) exec("createLink", url);
-  });
-
+  if (rtLink) rtLink.addEventListener("click", () => { const url = prompt("Link URL:"); if (url) exec("createLink", url); });
   const rtImage = $("rtImage");
-  if (rtImage) rtImage.addEventListener("click", () => {
-    const url = prompt("Image URL (https://...):");
-    if (url) exec("insertImage", url);
-  });
-
+  if (rtImage) rtImage.addEventListener("click", () => { const url = prompt("Image URL:"); if (url) exec("insertImage", url); });
   const rtBlock = $("rtBlock");
   if (rtBlock) rtBlock.addEventListener("change", () => { exec("formatBlock", rtBlock.value); rtBlock.selectedIndex = 0; });
-
   const rtSize = $("rtSize");
   if (rtSize) rtSize.addEventListener("change", () => { if (rtSize.value) exec("fontSize", rtSize.value); rtSize.selectedIndex = 0; });
 }
 initRichText();
 
-/* ========================== ACTION ROUTER ==========================
-   The site's Content-Security-Policy blocks inline event handler
-   attributes (onclick, onerror, etc) for security, which is why none of
-   the buttons on this page were doing anything. Every button below is
-   wired through a single delegated listener via data-action attributes
-   instead, which works fine under the CSP since it's all real JS in
-   this module rather than inline HTML attributes. */
+/* ========================== ACTION ROUTER ========================== */
 const ACTIONS = {
   "claim-exec": () => claimExec(),
   "add-announce": () => addAnnounce(),
@@ -1162,9 +1096,19 @@ const ACTIONS = {
   "gen-code": () => genCode(),
   "revoke-code": (el) => revokeCode(el.dataset.key),
   "save-content": () => saveContent(),
+  "enable-downtime": () => setDowntime(true),
+  "disable-downtime": () => setDowntime(false),
+  "reload-analytics": () => loadAnalytics(),
 };
 
 document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  const handler = ACTIONS[el.dataset.action];
+  if (handler) handler(el, e);
+});
+
+document.addEventListener("change", (e) => {
   const el = e.target.closest("[data-action]");
   if (!el) return;
   const handler = ACTIONS[el.dataset.action];
