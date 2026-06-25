@@ -75,7 +75,7 @@
     <button class="cr-tab exec-only" data-tab="tests">Tests</button>
     <button class="cr-tab exec-only" data-tab="executive">Executive</button>
     <button class="cr-tab" data-tab="audit">Audit log</button>
-    <button class="cr-tab exec-only" data-tab="downtime">Downtime</button>
+
     <button class="cr-tab" data-tab="analytics">Analytics</button>
   </nav>
 
@@ -464,29 +464,6 @@
     <div id="auditList"><p style="color:var(--muted)">Loading&hellip;</p></div>
   </div>
 
-  <!-- DOWNTIME -->
-  <div class="cr-panel exec-only" data-panel="downtime">
-    <div class="wrap" style="max-width:900px;padding-top:0">
-      <div class="card" style="padding:28px">
-        <h2 style="margin-bottom:4px">Downtime Mode</h2>
-        <p style="color:var(--muted);margin-bottom:24px">When active, every page shows a maintenance overlay. The admin panel stays accessible to staff.</p>
-        <div id="dtStatus" style="margin-bottom:20px;padding:12px 16px;border-radius:10px;background:rgba(105,217,156,.08);border:1px solid rgba(105,217,156,.2);color:#69d99c;font-weight:600;">
-          Checking status&hellip;
-        </div>
-        <div style="display:grid;gap:14px;max-width:480px">
-          <label style="font-size:.85rem;color:var(--muted);font-weight:600">Maintenance message</label>
-          <textarea id="dtMessage" rows="2" class="input" placeholder="We are currently down for maintenance. We'll be back shortly." style="resize:vertical"></textarea>
-          <label style="font-size:.85rem;color:var(--muted);font-weight:600">Discord server URL</label>
-          <input id="dtDiscordUrl" type="url" class="input" placeholder="https://discord.gg/yourserver">
-        </div>
-        <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn" data-action="enable-downtime">Enable Downtime</button>
-          <button class="btn" data-action="disable-downtime" style="background:rgba(255,122,122,.12);color:#ff7a7a;border-color:rgba(255,122,122,.2)">Disable Downtime</button>
-        </div>
-        <div id="dtMsg" style="margin-top:12px"></div>
-      </div>
-    </div>
-  </div>
 
   <!-- ANALYTICS -->
   <div class="cr-panel" data-panel="analytics">
