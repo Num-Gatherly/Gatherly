@@ -19,9 +19,9 @@
       content: "";
       position: absolute; inset: 0; pointer-events: none;
       background:
-        radial-gradient(ellipse 50% 80% at 5% 50%, rgba(62,108,224,0.14) 0%, transparent 65%),
-        radial-gradient(ellipse 40% 60% at 95% 20%, rgba(105,217,156,0.08) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 50% at 50% 110%, rgba(255,180,84,0.06) 0%, transparent 55%);
+        radial-gradient(ellipse 50% 80% at 5% 50%, rgba(79,70,229,0.12) 0%, transparent 65%),
+        radial-gradient(ellipse 40% 60% at 95% 20%, rgba(74,222,128,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 50% 110%, rgba(129,140,248,0.05) 0%, transparent 55%);
     }
     .disc-hero-inner { position: relative; }
     .disc-hero-kicker {
@@ -35,14 +35,10 @@
     .disc-hero p { max-width: 520px; font-size: 1rem; color: var(--muted); margin-bottom: 28px; }
 
     /* ---- pulse bar ---- */
-    .disc-pulse {
-      display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 32px;
-    }
-    .disc-pulse-stat {
-      display: flex; align-items: center; gap: 8px; font-size: .85rem;
-    }
+    .disc-pulse { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 32px; }
+    .disc-pulse-stat { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
     .disc-pulse-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .disc-pulse-dot.live { background: var(--live); box-shadow: 0 0 0 3px rgba(255,180,84,0.2); animation: pulse 1.6s infinite; }
+    .disc-pulse-dot.live { background: var(--live); box-shadow: 0 0 0 3px rgba(251,146,60,0.2); animation: pulse 1.6s infinite; }
     .disc-pulse-dot.up { background: var(--good); }
     .disc-pulse-stat b { color: var(--text); }
 
@@ -52,9 +48,7 @@
       border-radius: 12px; padding: 16px 18px;
       backdrop-filter: blur(12px);
     }
-    .disc-search-row {
-      display: flex; gap: 10px; align-items: center; margin-bottom: 14px;
-    }
+    .disc-search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
     .disc-search-icon { color: var(--muted); flex-shrink: 0; }
     .disc-search-input {
       flex: 1; background: none; border: none; outline: none;
@@ -67,7 +61,7 @@
       font-size: .82rem; color: var(--muted); cursor: pointer; max-width: 160px;
     }
     .disc-tz-input:focus { color: var(--text); }
-    option { background: #111824; }
+    option { background: #131318; }
 
     .disc-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     .disc-filter-label { font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-right: 4px; flex-shrink: 0; }
@@ -78,37 +72,36 @@
       cursor: pointer; transition: all .15s; font-family: var(--font-body);
       white-space: nowrap;
     }
-    .disc-chip:hover { border-color: rgba(127,168,255,0.5); color: var(--text); background: rgba(127,168,255,0.06); }
-    .disc-chip.active { border-color: var(--signal); color: var(--signal); background: rgba(127,168,255,0.12); }
-    .disc-chip.live-chip.active { border-color: var(--live); color: var(--live); background: rgba(255,180,84,0.1); }
+    .disc-chip:hover { border-color: rgba(129,140,248,0.5); color: var(--text); background: rgba(129,140,248,0.06); }
+    .disc-chip.active { border-color: var(--signal); color: var(--signal); background: rgba(129,140,248,0.12); }
+    .disc-chip.live-chip.active { border-color: var(--live); color: var(--live); background: rgba(251,146,60,0.1); }
     .disc-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
     .disc-filter-sep { width: 1px; height: 18px; background: var(--line); flex-shrink: 0; margin: 0 2px; }
 
     /* ---- event grid ---- */
     .disc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 
-    /* ---- enhanced event cards ---- */
+    /* ---- event cards ---- */
     .ev-card {
-      border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
       background: linear-gradient(160deg, var(--panel) 0%, var(--ink-2) 100%);
       display: flex; flex-direction: column;
       transition: border-color .18s, transform .18s, box-shadow .18s;
       position: relative;
     }
-    .ev-card:hover { border-color: rgba(127,168,255,0.4); transform: translateY(-3px); box-shadow: 0 16px 40px -16px rgba(0,0,0,0.5); }
-    .ev-card.boosted { border-color: rgba(255,80,80,0.35); }
-    .ev-card.boosted:hover { border-color: rgba(255,80,80,0.6); box-shadow: 0 16px 40px -16px rgba(255,80,80,0.3); }
-    .ev-card.is-live { border-color: rgba(255,180,84,0.35); }
-    .ev-card.is-live:hover { border-color: rgba(255,180,84,0.6); box-shadow: 0 16px 40px -16px rgba(255,180,84,0.2); }
+    .ev-card:hover { border-color: rgba(129,140,248,0.4); transform: translateY(-3px); box-shadow: 0 16px 40px -16px rgba(0,0,0,0.5); }
+    .ev-card.boosted { border-color: rgba(251,146,60,0.3); }
+    .ev-card.boosted:hover { border-color: rgba(251,146,60,0.55); box-shadow: 0 16px 40px -16px rgba(251,146,60,0.2); }
+    .ev-card.is-live { border-color: rgba(74,222,128,0.25); }
+    .ev-card.is-live:hover { border-color: rgba(74,222,128,0.5); box-shadow: 0 16px 40px -16px rgba(74,222,128,0.15); }
 
     .ev-boost-bar {
       padding: 7px 16px; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-      background: linear-gradient(90deg, rgba(255,60,60,0.18), rgba(255,60,60,0.04));
-      border-bottom: 1px solid rgba(255,80,80,0.2); color: #ff8080;
+      background: linear-gradient(90deg, rgba(251,146,60,0.15), rgba(251,146,60,0.03));
+      border-bottom: 1px solid rgba(251,146,60,0.18); color: var(--live);
       display: flex; align-items: center; gap: 6px;
     }
-    .ev-boost-bar::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #ff6060; animation: pulse 1.4s infinite; flex-shrink: 0; }
+    .ev-boost-bar::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--live); animation: pulse 1.4s infinite; flex-shrink: 0; }
 
     .ev-banner {
       aspect-ratio: 16/7; background: linear-gradient(120deg, var(--panel-2), var(--ink-2));
@@ -118,8 +111,8 @@
     .ev-banner-badges { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
     .ev-banner-scenario {
       position: absolute; bottom: 10px; right: 10px;
-      background: rgba(9,13,19,0.82); border: 1px solid var(--line-strong);
-      border-radius: 8px; padding: 4px 10px; font-size: .72rem; font-weight: 600;
+      background: rgba(11,11,15,0.82); border: 1px solid var(--line-strong);
+      border-radius: 6px; padding: 4px 10px; font-size: .72rem; font-weight: 600;
       color: var(--text); backdrop-filter: blur(8px);
     }
 
@@ -133,20 +126,17 @@
 
     .ev-live-bar {
       display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-      background: rgba(255,180,84,0.08); border: 1px solid rgba(255,180,84,0.2);
+      background: rgba(74,222,128,0.06); border: 1px solid rgba(74,222,128,0.18);
       border-radius: 8px; font-size: .8rem;
     }
-    .ev-live-bar .ldot { width: 7px; height: 7px; border-radius: 50%; background: var(--live); animation: pulse 1.6s infinite; flex-shrink: 0; }
-    .ev-live-bar b { color: var(--live); }
+    .ev-live-bar .ldot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); animation: pulse 1.6s infinite; flex-shrink: 0; }
+    .ev-live-bar b { color: var(--good); }
 
     .ev-footer { display: flex; gap: 8px; align-items: center; margin-top: auto; padding-top: 4px; }
-    .ev-host { font-size: .75rem; color: var(--muted); flex: 1; }
-    .ev-host b { color: var(--text); }
-
     .ev-code-out { font-size: .85rem; padding: 8px 12px; border-radius: 8px; }
 
     /* ---- empty / loading ---- */
-    .disc-empty { padding: 48px 24px; text-align: center; border: 1px dashed var(--line-strong); border-radius: 16px; color: var(--muted); }
+    .disc-empty { padding: 48px 24px; text-align: center; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--muted); }
     .disc-empty h3 { color: var(--text); margin-bottom: 8px; }
     .disc-loading { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 48px 0; color: var(--muted); font-size: .85rem; }
 
@@ -174,7 +164,6 @@
       <div class="disc-pulse-stat"><span class="disc-pulse-dot up"></span><b id="upCount">—</b> upcoming</div>
     </div>
 
-    <!-- unified search + filter panel -->
     <div class="disc-search-wrap">
       <div class="disc-search-row">
         <svg class="disc-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -188,11 +177,11 @@
 
       <div class="disc-filters">
         <span class="disc-filter-label">Status</span>
-        <button class="disc-chip active" data-filter="all">All events</button>
+        <button class="disc-chip active" data-filter="all">All</button>
         <button class="disc-chip live-chip" data-filter="live"><span class="disc-chip-dot"></span>Live now</button>
         <button class="disc-chip" data-filter="upcoming">Upcoming</button>
-        <button class="disc-chip" data-filter="boosted">⚡ Boosted</button>
-        <button class="disc-chip" data-filter="members">👥 Most players</button>
+        <button class="disc-chip" data-filter="boosted">Boosted</button>
+        <button class="disc-chip" data-filter="members">Most players</button>
 
         <div class="disc-filter-sep"></div>
         <span class="disc-filter-label">Scenario</span>
@@ -207,7 +196,7 @@
         <div class="disc-filter-sep"></div>
         <span class="disc-filter-label">Duration</span>
         <button class="disc-chip" data-duration="">Any</button>
-        <button class="disc-chip" data-duration="short">≤ 1h</button>
+        <button class="disc-chip" data-duration="short">Under 1h</button>
         <button class="disc-chip" data-duration="medium">1–2h</button>
         <button class="disc-chip" data-duration="long">2h+</button>
       </div>
@@ -223,8 +212,7 @@
     </div>
     <aside class="ad-rail">
       <div class="ad-slot ad-slot--side" data-ad-slot="events-side"></div>
-      <div class="card" style="text-align:center; border-color:rgba(127,168,255,0.2)">
-        <div style="font-size:1.4rem;margin-bottom:8px">🚀</div>
+      <div class="card" style="text-align:center; border-color:rgba(129,140,248,0.2)">
         <h3 style="font-size:1rem;margin-bottom:8px">List your event</h3>
         <p style="font-size:.82rem;margin-top:0">Reach players already browsing this feed.</p>
         <a href="/advertise" class="btn btn-primary btn-sm" style="margin-top:12px;width:100%">Advertise free</a>
