@@ -14,70 +14,237 @@
   <style>
     body { overflow-x: hidden; }
 
-    /* ---------- hero ---------- */
-    .hero { padding: 124px 0 104px; position: relative; }
-.hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 55% 60% at 8% 20%, rgba(62,108,224,0.13) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 50% at 92% 10%, rgba(105,217,156,0.07) 0%, transparent 65%),
-    radial-gradient(ellipse 50% 70% at 60% 90%, rgba(127,168,255,0.06) 0%, transparent 60%);
-}
-    .hero-grid { grid-template-columns: 1.05fr 0.95fr; gap: 70px; }
-    .hero h1 { font-size: clamp(2.6rem, 6vw, 4.6rem); opacity: 0; transform: translateY(28px); animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0.08s forwards; }
-    .hero p.lede { font-size: 1.18rem; opacity: 0; transform: translateY(20px); animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0.20s forwards; }
-    .hero-actions { opacity: 0; transform: translateY(16px); animation: fade-up 0.7s cubic-bezier(0.22,1,0.36,1) 0.32s forwards; }
+    /* ============================================================
+       CURSOR GLOW — magnetic phosphor trail
+    ============================================================ */
+    #cursor-glow {
+      position: fixed; top: 0; left: 0; pointer-events: none; z-index: 9999;
+      width: 320px; height: 320px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(129,140,248,0.09) 0%, transparent 65%);
+      transform: translate(-50%, -50%);
+      transition: transform 0.55s cubic-bezier(0.23, 1, 0.32, 1),
+                  opacity 0.4s ease;
+      opacity: 0;
+    }
+    #cursor-dot {
+      position: fixed; top: 0; left: 0; pointer-events: none; z-index: 10000;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--signal);
+      transform: translate(-50%, -50%);
+      transition: transform 0.1s cubic-bezier(0.23, 1, 0.32, 1),
+                  opacity 0.3s ease, width 0.2s ease, height 0.2s ease;
+      opacity: 0;
+      mix-blend-mode: screen;
+    }
+
+    /* ============================================================
+       HERO
+    ============================================================ */
+    .hero {
+      padding: 130px 0 110px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* animated gradient mesh background */
+    .hero-bg {
+      position: absolute; inset: 0; pointer-events: none;
+      overflow: hidden;
+    }
+    .hero-bg-orb {
+      position: absolute; border-radius: 50%;
+      filter: blur(80px); opacity: 0;
+      animation: orb-float-in 1.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+    }
+    .hero-bg-orb-1 {
+      width: 700px; height: 700px;
+      left: -200px; top: -200px;
+      background: radial-gradient(circle, rgba(79,70,229,0.18) 0%, transparent 70%);
+      animation-delay: 0s;
+    }
+    .hero-bg-orb-2 {
+      width: 500px; height: 500px;
+      right: -100px; top: -50px;
+      background: radial-gradient(circle, rgba(74,222,128,0.07) 0%, transparent 70%);
+      animation-delay: 0.15s;
+    }
+    .hero-bg-orb-3 {
+      width: 400px; height: 400px;
+      left: 40%; bottom: -100px;
+      background: radial-gradient(circle, rgba(129,140,248,0.08) 0%, transparent 70%);
+      animation-delay: 0.3s;
+    }
+    @keyframes orb-float-in {
+      from { opacity: 0; transform: scale(0.8); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    /* floating particles */
+    .hero-particles {
+      position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+    }
+    .particle {
+      position: absolute; width: 2px; height: 2px; border-radius: 50%;
+      background: var(--signal); opacity: 0;
+      animation: particle-rise var(--dur, 8s) linear var(--delay, 0s) infinite;
+    }
+    @keyframes particle-rise {
+      0%   { opacity: 0; transform: translateY(0) scale(0); }
+      10%  { opacity: 0.6; transform: translateY(-20px) scale(1); }
+      90%  { opacity: 0.15; }
+      100% { opacity: 0; transform: translateY(-180px) scale(0.3); }
+    }
+
+    /* grid underlay */
+    .hero-grid-bg {
+      position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(129,140,248,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(129,140,248,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 80%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 80%);
+      opacity: 0;
+      animation: fade-in 1.2s ease 0.3s forwards;
+    }
+    @keyframes fade-in { to { opacity: 1; } }
+
+    .hero-layout { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 70px; align-items: center; }
+
+    /* text animations */
+    .hero h1 {
+      font-size: clamp(2.6rem, 6vw, 4.6rem);
+      opacity: 0; transform: translateY(28px);
+      animation: fade-up 0.7s cubic-bezier(0.23, 1, 0.32, 1) 0.12s forwards;
+    }
+    .hero p.lede {
+      font-size: 1.18rem;
+      opacity: 0; transform: translateY(20px);
+      animation: fade-up 0.7s cubic-bezier(0.23, 1, 0.32, 1) 0.26s forwards;
+    }
+    .hero-actions {
+      opacity: 0; transform: translateY(16px);
+      animation: fade-up 0.7s cubic-bezier(0.23, 1, 0.32, 1) 0.38s forwards;
+    }
     .hero-actions .btn { border-radius: 999px; padding: 14px 26px; }
-    .hero-pulse { opacity: 0; animation: fade-up 0.6s cubic-bezier(0.22,1,0.36,1) 0s forwards; }
+    /* magnetic button effect handled by JS */
+    .hero-actions .btn { position: relative; overflow: hidden; }
+    .hero-actions .btn::before {
+      content: "";
+      position: absolute; inset: 0; border-radius: inherit;
+      background: rgba(255,255,255,0.06);
+      opacity: 0; transform: scale(0.8);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .hero-actions .btn:hover::before { opacity: 1; transform: scale(1); }
+    .hero-actions .btn:active { transform: scale(0.97); }
+
+    .hero-pulse {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 0.82rem; color: var(--muted); margin-bottom: 20px;
+      opacity: 0;
+      animation: fade-up 0.6s cubic-bezier(0.23, 1, 0.32, 1) 0s forwards;
+    }
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--live);
+      position: relative;
+    }
+    .pulse-dot::after {
+      content: ""; position: absolute; inset: -3px;
+      border-radius: 50%; border: 1px solid var(--live);
+      opacity: 0.5;
+      animation: pulse-ring 1.8s ease-out infinite;
+    }
+    @keyframes pulse-ring {
+      0%   { transform: scale(0.8); opacity: 0.5; }
+      100% { transform: scale(1.8); opacity: 0; }
+    }
+
     @keyframes fade-up { to { opacity: 1; transform: none; } }
 
-    .hero-radar-wrap { opacity: 0; transform: translateY(20px); animation: fade-up 0.8s cubic-bezier(0.22,1,0.36,1) 0.18s forwards; }
-    .radar-legend { display: flex; gap: 20px; justify-content: center; margin-top: 16px; font-size: 0.82rem; color: var(--muted); }
+    /* radar */
+    .hero-radar-wrap {
+      opacity: 0; transform: translateY(20px);
+      animation: fade-up 0.8s cubic-bezier(0.23, 1, 0.32, 1) 0.22s forwards;
+    }
+    .radar-legend {
+      display: flex; gap: 20px; justify-content: center;
+      margin-top: 16px; font-size: 0.82rem; color: var(--muted);
+    }
     .radar-legend span { display: inline-flex; align-items: center; gap: 7px; }
     .radar-legend i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
     .radar-legend .lg-live i { background: var(--live); }
     .radar-legend .lg-news i { background: var(--good); }
     .radar-blip.news { fill: var(--good); }
 
+    /* ============================================================
+       TICKER
+    ============================================================ */
     .ticker { animation: ticker-scroll 60s linear infinite; }
     @keyframes ticker-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-33.333%); } }
     .ticker-item { color: var(--muted); }
     .ticker-item b { color: var(--text); }
 
-    /* ---------- "Real sessions" cross-out + cycling word ---------- */
+    /* ============================================================
+       CYCLE WORD
+    ============================================================ */
     .cycle-word-wrap { display: inline-block; }
     .cycle-word {
       position: relative; display: inline-block; color: var(--text);
-      transition: opacity .32s ease, transform .32s ease;
+      transition: opacity 0.32s ease, transform 0.32s ease;
     }
     .cycle-word::after {
       content: ""; position: absolute; left: -4%; right: -4%; top: 53%; height: 2px;
       background: var(--signal); transform: scaleX(0); transform-origin: left;
-      transition: transform .4s cubic-bezier(.65,0,.35,1);
+      transition: transform 0.4s cubic-bezier(0.65, 0, 0.35, 1);
     }
     .cycle-word.struck::after { transform: scaleX(1); }
     .cycle-word.swap-out { opacity: 0; transform: translateY(-8px); }
     @media (prefers-reduced-motion: reduce) { .cycle-word, .cycle-word::after { transition: none; } }
 
-    /* ---------- section header (used sparingly, not on every section) ---------- */
+    /* ============================================================
+       SECTION HEADER
+    ============================================================ */
     .sect-head { max-width: 600px; margin-bottom: 38px; }
     .sect-head h2 { font-size: clamp(1.8rem, 3.4vw, 2.6rem); }
     .sect-head p { margin-top: 10px; }
-    .sect-tag { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: block; }
+    .sect-tag {
+      font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: block;
+    }
 
-    /* ---------- editorial spotlight testimonial ---------- */
-    .spotlight { display: grid; grid-template-columns: 1.1fr 0.9fr; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; align-items: stretch; }
+    /* ============================================================
+       SPOTLIGHT TESTIMONIAL
+    ============================================================ */
+    .spotlight {
+      display: grid; grid-template-columns: 1.1fr 0.9fr;
+      border: 1px solid var(--line); border-radius: 20px;
+      overflow: hidden; align-items: stretch;
+      transition: border-color 0.25s ease;
+    }
+    .spotlight:hover { border-color: rgba(129,140,248,0.3); }
     .spotlight-img { position: relative; min-height: 320px; background: var(--ink-2); }
     .spotlight-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .spotlight-body { padding: 44px 42px; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
-    .spotlight-quote { font-family: var(--font-display); font-size: 1.55rem; font-weight: 500; line-height: 1.35; color: var(--text); }
-    .spotlight-server { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--muted); font-weight: 600; }
-    @media (max-width: 860px) { .spotlight { grid-template-columns: 1fr; } .spotlight-img { min-height: 220px; } }
+    .spotlight-body {
+      padding: 44px 42px; display: flex; flex-direction: column;
+      justify-content: center; gap: 18px;
+    }
+    .spotlight-quote {
+      font-family: var(--font-display); font-size: 1.55rem;
+      font-weight: 500; line-height: 1.35; color: var(--text);
+    }
+    .spotlight-server {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.88rem; color: var(--muted); font-weight: 600;
+    }
+    @media (max-width: 860px) {
+      .spotlight { grid-template-columns: 1fr; }
+      .spotlight-img { min-height: 220px; }
+    }
 
-    /* ---------- alternating product rows ---------- */
+    /* ============================================================
+       ALTERNATING PRODUCT ROWS
+    ============================================================ */
     .alt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
     .alt-row + .alt-row { margin-top: 64px; }
     .alt-row.reverse .alt-text { order: 2; }
@@ -89,58 +256,193 @@
     .win-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); display: block; }
     .win-shot { position: relative; aspect-ratio: 16/10; }
     .win-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .win-overlay { position: absolute; left: 14px; bottom: 14px; background: rgba(9,13,19,0.86); border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; max-width: 240px; }
+    .win-overlay {
+      position: absolute; left: 14px; bottom: 14px;
+      background: rgba(9,13,19,0.86); border: 1px solid var(--line-strong);
+      border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; max-width: 240px;
+    }
     .win-overlay b { display: block; font-size: 0.86rem; margin-bottom: 3px; }
     .win-report { padding: 22px; display: flex; gap: 24px; align-items: center; }
     .win-report .funnel-mini { flex: 1; display: grid; gap: 9px; }
     .win-report .funnel-mini .row { display: flex; justify-content: space-between; font-size: 0.84rem; }
     .win-report .funnel-mini .row span { color: var(--muted); }
     .win-report .funnel-mini .row b { font-variant-numeric: tabular-nums; }
-    @media (max-width: 860px) { .alt-row, .win-report { grid-template-columns: 1fr; } .alt-row.reverse .alt-text, .alt-row.reverse .alt-visual { order: initial; } .win-report { flex-direction: column; align-items: stretch; } }
+    @media (max-width: 860px) {
+      .alt-row { grid-template-columns: 1fr; }
+      .alt-row.reverse .alt-text, .alt-row.reverse .alt-visual { order: initial; }
+      .win-report { flex-direction: column; align-items: stretch; }
+    }
 
-    /* ---------- bento features ---------- */
-    .bento { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 168px; grid-auto-flow: dense; gap: 16px; }
-    .bento .card { display: flex; flex-direction: column; justify-content: flex-end; transition: border-color 0.2s ease; }
-    .bento .card:hover { border-color: var(--line-strong); }
+    /* ============================================================
+       BENTO FEATURES — with hover lift and glow
+    ============================================================ */
+    .bento {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-auto-rows: 168px;
+      grid-auto-flow: dense;
+      gap: 16px;
+    }
+    .bento .card {
+      display: flex; flex-direction: column; justify-content: flex-end;
+      transition: border-color 0.2s ease, transform 0.25s cubic-bezier(0.23, 1, 0.32, 1),
+                  box-shadow 0.25s ease;
+      will-change: transform;
+    }
+    .bento .card:hover {
+      border-color: rgba(129,140,248,0.35);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px -12px rgba(79,70,229,0.25);
+    }
+    .bento .card:active { transform: translateY(-1px) scale(0.99); }
     .bento .b-lg { grid-column: span 2; grid-row: span 2; justify-content: space-between; }
     .bento .b-md { grid-column: span 2; }
     .bento .b-sm { grid-column: span 1; }
-    @media (max-width: 860px) { .bento { grid-template-columns: repeat(2, 1fr); } .bento .b-lg { grid-column: span 2; grid-row: span 1; } }
-    @media (max-width: 560px) { .bento { grid-template-columns: 1fr; } .bento .b-lg, .bento .b-md { grid-column: span 1; } }
+    @media (max-width: 860px) {
+      .bento { grid-template-columns: repeat(2, 1fr); }
+      .bento .b-lg { grid-column: span 2; grid-row: span 1; }
+    }
+    @media (max-width: 560px) {
+      .bento { grid-template-columns: 1fr; }
+      .bento .b-lg, .bento .b-md { grid-column: span 1; }
+    }
 
-    /* ---------- quiet stat band ---------- */
+    /* ============================================================
+       SCORE DIAL — animated on reveal
+    ============================================================ */
+    .score-dial-animated circle.track-fill {
+      stroke-dashoffset: 440; /* full circumference = hidden */
+      transition: stroke-dashoffset 1.2s cubic-bezier(0.23, 1, 0.32, 1) 0.3s;
+    }
+    .in .score-dial-animated circle.track-fill {
+      stroke-dashoffset: 58.057; /* the "78" position */
+    }
+
+    /* ============================================================
+       QUIET STATS
+    ============================================================ */
     .quiet-stats { display: flex; flex-wrap: wrap; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
     .quiet-stat { flex: 1; min-width: 220px; padding: 38px 30px; border-left: 1px solid var(--line); }
     .quiet-stat:first-child { border-left: 0; }
-    .quiet-stat b { display: block; font-family: var(--font-display); font-size: 2.3rem; font-weight: 600; }
+    .quiet-stat b {
+      display: block; font-family: var(--font-display); font-size: 2.3rem; font-weight: 600;
+      opacity: 0; transform: translateY(12px);
+      transition: opacity 0.6s cubic-bezier(0.23, 1, 0.32, 1), transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+    }
     .quiet-stat span { font-size: 0.85rem; color: var(--muted); }
-    @media (max-width: 700px) { .quiet-stat { border-left: 0; border-top: 1px solid var(--line); } .quiet-stat:first-child { border-top: 0; } }
+    .in .quiet-stat b { opacity: 1; transform: none; }
+    /* stagger each stat */
+    .quiet-stats .quiet-stat:nth-child(1) b { transition-delay: 0s; }
+    .quiet-stats .quiet-stat:nth-child(2) b { transition-delay: 0.1s; }
+    .quiet-stats .quiet-stat:nth-child(3) b { transition-delay: 0.2s; }
+    @media (max-width: 700px) {
+      .quiet-stat { border-left: 0; border-top: 1px solid var(--line); }
+      .quiet-stat:first-child { border-top: 0; }
+    }
 
-    /* ---------- FAQ accordion ---------- */
+    /* ============================================================
+       FAQ
+    ============================================================ */
     .faq-list { border-top: 1px solid var(--line); max-width: 760px; }
     .faq-item { border-bottom: 1px solid var(--line); }
-    .faq-q { width: 100%; text-align: left; background: none; border: none; color: var(--text); font-family: var(--font-display); font-size: 1.08rem; font-weight: 500; padding: 24px 2px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-    .faq-q .plus { font-size: 1.5rem; color: var(--muted); transition: transform 0.25s ease; flex-shrink: 0; line-height: 1; }
+    .faq-q {
+      width: 100%; text-align: left; background: none; border: none;
+      color: var(--text); font-family: var(--font-display);
+      font-size: 1.08rem; font-weight: 500; padding: 24px 2px;
+      cursor: pointer; display: flex; justify-content: space-between;
+      align-items: center; gap: 16px;
+      transition: color 0.2s ease;
+    }
+    .faq-q:hover { color: var(--signal); }
+    .faq-q .plus { font-size: 1.5rem; color: var(--muted); transition: transform 0.25s cubic-bezier(0.23, 1, 0.32, 1); flex-shrink: 0; line-height: 1; }
     .faq-item.open .faq-q .plus { transform: rotate(45deg); }
-    .faq-a { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+    .faq-a { max-height: 0; overflow: hidden; transition: max-height 0.35s cubic-bezier(0.23, 1, 0.32, 1); }
     .faq-item.open .faq-a { max-height: 260px; }
     .faq-a p { padding: 0 2px 24px; max-width: 600px; }
 
-    /* ---------- closing CTA ---------- */
-    .cta-section { text-align: center; padding: 110px 0; }
+    /* ============================================================
+       CTA SECTION
+    ============================================================ */
+    .cta-section { text-align: center; padding: 110px 0; position: relative; overflow: hidden; }
+    .cta-section::before {
+      content: "";
+      position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 60% 70% at 50% 50%, rgba(79,70,229,0.1) 0%, transparent 65%);
+    }
     .cta-section h2 { font-size: clamp(2rem, 4vw, 3rem); }
     .cta-section .btn { border-radius: 999px; padding: 15px 32px; }
+
+    /* ============================================================
+       SCROLL REVEAL — snappy fade-up
+    ============================================================ */
+    .reveal {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.6s cubic-bezier(0.23, 1, 0.32, 1),
+                  transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .reveal.in { opacity: 1; transform: none; }
+
+    /* ============================================================
+       LIVE EVENT CARDS — hover glow
+    ============================================================ */
+    .live-event-card {
+      transition: border-color 0.2s ease, transform 0.25s cubic-bezier(0.23, 1, 0.32, 1),
+                  box-shadow 0.25s ease;
+      cursor: pointer; display: block; text-decoration: none !important;
+    }
+    .live-event-card:hover {
+      border-color: rgba(251,146,60,0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px -8px rgba(251,146,60,0.18);
+    }
+    .live-event-card:active { transform: translateY(-1px) scale(0.985); }
+
+    /* ============================================================
+       FLOATING SCORE DIAL IN HERO (animates on page load)
+    ============================================================ */
+    .hero-score-dial { position: relative; display: inline-flex; }
+    .hero-score-dial circle.dial-progress {
+      stroke-dashoffset: 440;
+      animation: dial-fill 1.4s cubic-bezier(0.23, 1, 0.32, 1) 0.7s forwards;
+    }
+    @keyframes dial-fill { to { stroke-dashoffset: 58.057; } }
+
+    /* ============================================================
+       MOBILE
+    ============================================================ */
+    @media (max-width: 820px) {
+      .hero-layout { grid-template-columns: 1fr; }
+      .hero-radar-wrap { display: none; }
+    }
   </style>
 </head>
 <body>
 
+<!-- cursor effects -->
+<div id="cursor-glow"></div>
+<div id="cursor-dot"></div>
+
 <nav id="nav"></nav>
 
 <header class="hero">
-  <div class="wrap hero-grid">
+  <div class="hero-bg">
+    <div class="hero-bg-orb hero-bg-orb-1"></div>
+    <div class="hero-bg-orb hero-bg-orb-2"></div>
+    <div class="hero-bg-orb hero-bg-orb-3"></div>
+  </div>
+  <div class="hero-grid-bg"></div>
+  <div class="hero-particles" id="heroParticles"></div>
+
+  <div class="wrap hero-layout">
     <div>
-      <span class="hero-pulse"><b id="liveCount">-</b><span id="pulseLabel">events live right now</span></span>
-      <h1 id="heroHeadline"><span id="heroHeadlineMain">Fill every session.<br>Then </span><span class="accent" id="heroHeadlineAccent">prove it worked.</span></h1>
+      <div class="hero-pulse">
+        <span class="pulse-dot"></span>
+        <b id="liveCount">-</b><span id="pulseLabel">events live right now</span>
+      </div>
+      <h1 id="heroHeadline">
+        <span id="heroHeadlineMain">Fill every session.<br>Then </span><span class="accent" id="heroHeadlineAccent">prove it worked.</span>
+      </h1>
       <p class="lede" id="heroSub">List your ER:LC event, reach players who are already looking, and get a verified report the moment it ends.</p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="/advertise">Advertise your event</a>
@@ -163,7 +465,8 @@
 
 <section class="section">
   <div class="wrap">
-    <div class="sect-head reveal"><span class="sect-tag">From the community</span>
+    <div class="sect-head reveal">
+      <span class="sect-tag">From the community</span>
       <h2>Real servers. Real <span class="cycle-word-wrap"><span class="cycle-word" id="cycleWord">sessions</span></span>.</h2>
       <p>Hosts across the Australian ER:LC scene use Gatherly to fill events and prove what worked.</p>
     </div>
@@ -176,7 +479,8 @@
 
 <section class="section">
   <div class="wrap">
-    <div class="sect-head reveal"><span class="sect-tag">How it works</span>
+    <div class="sect-head reveal">
+      <span class="sect-tag">How it works</span>
       <h2>You list it. We measure it.</h2>
     </div>
 
@@ -203,10 +507,10 @@
       <div class="alt-visual win">
         <div class="win-bar"><i></i><i></i><i></i></div>
         <div class="win-report">
-          <div class="score-dial" style="width:120px;height:120px">
+          <div class="score-dial hero-score-dial" style="width:120px;height:120px">
             <svg viewBox="0 0 170 170" width="120" height="120">
               <circle cx="85" cy="85" r="70" fill="none" stroke="var(--line-strong)" stroke-width="10"/>
-              <circle cx="85" cy="85" r="70" fill="none" stroke="var(--signal)" stroke-width="10" stroke-linecap="round" stroke-dasharray="263.894" stroke-dashoffset="58.057"/>
+              <circle class="dial-progress" cx="85" cy="85" r="70" fill="none" stroke="var(--signal)" stroke-width="10" stroke-linecap="round" stroke-dasharray="439.82" stroke-dashoffset="440"/>
             </svg>
             <div class="val"><b style="color:var(--signal);font-size:1.8rem">78</b><span style="font-size:.62rem">Health Score</span></div>
           </div>
@@ -225,7 +529,8 @@
 
 <section class="section">
   <div class="wrap">
-    <div class="sect-head reveal"><span class="sect-tag">Features</span>
+    <div class="sect-head reveal">
+      <span class="sect-tag">Features</span>
       <h2>Everything a host needs</h2>
     </div>
     <div class="bento reveal">
@@ -237,7 +542,7 @@
         <div class="score-dial" style="width:90px;height:90px;align-self:flex-end">
           <svg viewBox="0 0 170 170" width="90" height="90">
             <circle cx="85" cy="85" r="70" fill="none" stroke="var(--line-strong)" stroke-width="12"/>
-            <circle cx="85" cy="85" r="70" fill="none" stroke="var(--good)" stroke-width="12" stroke-linecap="round" stroke-dasharray="263.894" stroke-dashoffset="58.057"/>
+            <circle cx="85" cy="85" r="70" fill="none" stroke="var(--good)" stroke-width="12" stroke-linecap="round" stroke-dasharray="439.82" stroke-dashoffset="58.057"/>
           </svg>
           <div class="val"><b style="color:var(--good);font-size:1.5rem">78</b></div>
         </div>
@@ -275,7 +580,6 @@
   </div>
 </section>
 
-<!-- Advertising slot (rotated, staff-approved) -->
 <div class="wrap"><div class="ad-slot" data-ad-slot="home-mid"></div></div>
 
 <section class="quiet-stats reveal">
@@ -323,11 +627,162 @@
 
 <script type="module" src="/js/pages/index.js"></script>
 <script>
+  /* ============================================================
+     SCROLL REVEAL
+  ============================================================ */
   (function () {
     const observer = new IntersectionObserver((entries) => {
-      entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); observer.unobserve(e.target); } });
-    }, { threshold: 0.12 });
+      entries.forEach((e) => {
+        if (e.isIntersecting) { e.target.classList.add("in"); observer.unobserve(e.target); }
+      });
+    }, { threshold: 0.1 });
     document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+  })();
+
+  /* ============================================================
+     CURSOR GLOW — spring-physics trailing glow + dot
+     Uses spring interpolation so the glow has momentum, not just
+     instant position updates (Emil's rule: use spring for decorative
+     mouse interactions, not raw position).
+  ============================================================ */
+  (function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia("(hover: none)").matches) return; // touch devices
+
+    const glow = document.getElementById("cursor-glow");
+    const dot  = document.getElementById("cursor-dot");
+
+    let mx = 0, my = 0;       // target (actual mouse)
+    let gx = 0, gy = 0;       // glow current position (spring)
+    let vgx = 0, vgy = 0;     // glow velocity
+    let active = false;
+
+    // spring constants: stiffness=0.07, damping=0.82 gives a slow dreamy trail
+    const STIFFNESS = 0.07;
+    const DAMPING   = 0.82;
+
+    document.addEventListener("mousemove", (e) => {
+      mx = e.clientX; my = e.clientY;
+      if (!active) {
+        active = true;
+        glow.style.opacity = "1";
+        dot.style.opacity  = "1";
+        // snap dot to position immediately (no spring on the dot — it's precise)
+        dot.style.transform = `translate(calc(${mx}px - 50%), calc(${my}px - 50%))`;
+        requestAnimationFrame(tick);
+      }
+      dot.style.transform = `translate(calc(${mx}px - 50%), calc(${my}px - 50%))`;
+    });
+
+    document.addEventListener("mouseleave", () => {
+      glow.style.opacity = "0";
+      dot.style.opacity  = "0";
+      active = false;
+    });
+
+    // scale dot up on hoverable elements
+    document.addEventListener("mouseover", (e) => {
+      if (e.target.closest("a, button, [data-action], .card, .bento .card")) {
+        dot.style.width  = "20px";
+        dot.style.height = "20px";
+        dot.style.opacity = "0.35";
+      }
+    });
+    document.addEventListener("mouseout", (e) => {
+      if (e.target.closest("a, button, [data-action], .card, .bento .card")) {
+        dot.style.width  = "6px";
+        dot.style.height = "6px";
+        dot.style.opacity = "1";
+      }
+    });
+
+    function tick() {
+      if (!active) return;
+      // spring step
+      const fx = (mx - gx) * STIFFNESS;
+      const fy = (my - gy) * STIFFNESS;
+      vgx = (vgx + fx) * DAMPING;
+      vgy = (vgy + fy) * DAMPING;
+      gx += vgx;
+      gy += vgy;
+      glow.style.transform = `translate(calc(${gx}px - 50%), calc(${gy}px - 50%))`;
+      requestAnimationFrame(tick);
+    }
+  })();
+
+  /* ============================================================
+     HERO PARTICLES — ambient floating dots
+  ============================================================ */
+  (function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const container = document.getElementById("heroParticles");
+    if (!container) return;
+    const COUNT = 18;
+    for (let i = 0; i < COUNT; i++) {
+      const p = document.createElement("div");
+      p.className = "particle";
+      p.style.cssText = [
+        `left: ${5 + Math.random() * 90}%`,
+        `top: ${10 + Math.random() * 80}%`,
+        `--dur: ${6 + Math.random() * 10}s`,
+        `--delay: ${Math.random() * 8}s`,
+        `opacity: 0`,
+        `width: ${1 + Math.random() * 2}px`,
+        `height: ${1 + Math.random() * 2}px`,
+        `background: ${Math.random() > 0.6 ? "var(--signal)" : Math.random() > 0.5 ? "var(--good)" : "var(--live)"}`,
+      ].join(";");
+      container.appendChild(p);
+    }
+  })();
+
+  /* ============================================================
+     BENTO CARD 3D TILT — subtle parallax on mouse move
+     Emil's rule: spring-based mouse interactions feel natural
+  ============================================================ */
+  (function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia("(hover: none)").matches) return;
+
+    document.querySelectorAll(".bento .card").forEach((card) => {
+      let raf;
+      let tx = 0, ty = 0, vtx = 0, vty = 0;
+      let hovering = false;
+
+      card.addEventListener("mouseenter", () => { hovering = true; });
+      card.addEventListener("mouseleave", () => {
+        hovering = false;
+        // spring back to zero
+        const spring = () => {
+          tx *= 0.82; ty *= 0.82;
+          vtx *= 0.82; vty *= 0.82;
+          card.style.transform = `perspective(600px) rotateX(${ty.toFixed(2)}deg) rotateY(${tx.toFixed(2)}deg) translateY(-3px)`;
+          if (Math.abs(tx) > 0.01 || Math.abs(ty) > 0.01) requestAnimationFrame(spring);
+          else { card.style.transform = ""; }
+        };
+        requestAnimationFrame(spring);
+      });
+
+      card.addEventListener("mousemove", (e) => {
+        const rect = card.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = (e.clientX - cx) / (rect.width / 2);
+        const dy = (e.clientY - cy) / (rect.height / 2);
+        // target rotation: max ±5deg
+        const targetX =  dx * 5;
+        const targetY = -dy * 5;
+        cancelAnimationFrame(raf);
+        const step = () => {
+          if (!hovering) return;
+          vtx = (vtx + (targetX - tx) * 0.12) * 0.82;
+          vty = (vty + (targetY - ty) * 0.12) * 0.82;
+          tx += vtx; ty += vty;
+          card.style.transform = `perspective(600px) rotateX(${ty.toFixed(2)}deg) rotateY(${tx.toFixed(2)}deg) translateY(-3px)`;
+          raf = requestAnimationFrame(step);
+        };
+        raf = requestAnimationFrame(step);
+      });
+    });
   })();
 </script>
 </body>
