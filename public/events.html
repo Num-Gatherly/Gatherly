@@ -25,12 +25,13 @@
     }
     .disc-hero-inner { position: relative; }
     .disc-hero-kicker {
-      display: inline-flex; align-items: center; gap: 8px;
-      font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
       color: var(--signal); margin-bottom: 14px;
+      background: rgba(129,140,248,0.1); border: 1px solid rgba(129,140,248,0.22);
+      border-radius: 6px; padding: 4px 10px;
     }
-    .disc-hero-kicker::before { content: ""; width: 20px; height: 1px; background: var(--signal); }
-    .disc-hero h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.08; margin-bottom: 12px; }
+    .disc-hero h1 { font-size: clamp(1.9rem, 4.2vw, 3rem); line-height: 1.12; margin-bottom: 12px; }
     .disc-hero p { max-width: 520px; font-size: 1rem; color: var(--muted); margin-bottom: 28px; }
 
     /* ---- pulse bar ---- */
@@ -47,8 +48,8 @@
 
     /* ---- search + filters ---- */
     .disc-search-wrap {
-      background: rgba(13,18,26,0.7); border: 1px solid rgba(127,168,255,0.2);
-      border-radius: 16px; padding: 16px 18px;
+      background: rgba(19,19,24,0.8); border: 1px solid rgba(129,140,248,0.18);
+      border-radius: 12px; padding: 16px 18px;
       backdrop-filter: blur(12px);
     }
     .disc-search-row {
