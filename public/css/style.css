@@ -1043,6 +1043,15 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 36px; margin-top: 60
 }
 .rep-section-head-v2 p { font-size: .85rem; margin: 6px 0 0 42px; }
 
+/* Collapsible analytics stack */
+.rep-details-stack { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.rep-details-stack details.rep-box { margin: 0; }
+
+/* details/summary reset for collapsible boxes */
+details.rep-box { cursor: default; }
+details.rep-box summary { cursor: pointer; }
+details.rep-box summary:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; border-radius: var(--radius); }
+
 @media (max-width: 600px) {
   .ai-panel { width: calc(100vw - 32px); right: 16px; bottom: 86px; }
   .ai-fab { bottom: 20px; right: 16px; }
