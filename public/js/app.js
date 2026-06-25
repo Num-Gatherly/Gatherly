@@ -134,7 +134,17 @@ async function checkDowntime() {
     const res = await fetch("/api/admin?action=downtime-get");
     if (!res.ok) return;
     const { downtime } = await res.json();
-    if (!downtime?.active) return;
+    const overlay = document.getElementById("g-downtime-overlay");
+    if (!downtime?.active) {
+      // Remove overlay if downtime was cleared
+      if (overlay) {
+        overlay.remove();
+        document.body.style.filter = "";
+        document.body.style.pointerEvents = "";
+        document.body.style.overflow = "";
+      }
+      return;
+    }
     showDowntimeOverlay(downtime);
   } catch {}
 }
@@ -163,6 +173,9 @@ function showDowntimeOverlay(downtime) {
   document.body.appendChild(overlay);
   overlay.style.filter = "none";
   overlay.style.pointerEvents = "all";
+
+  // Poll every 30s so the overlay auto-clears when downtime ends
+  setInterval(checkDowntime, 30_000);
 }
 
 /* =========================================================================
@@ -278,16 +291,96 @@ function buildUserButton(el, user) {
       <a href="/dashboard" class="ndd-item">Dashboard</a>
       <a href="/settings" class="ndd-item">Settings</a>
       <a href="/reports" class="ndd-item">My reports</a>
+      <button id="dropdownBilling" class="ndd-item" type="button">Billing &amp; plan</button>
       ${user.role ? `<a href="/admin" class="ndd-item">Control room</a>` : ""}
       <div class="ndd-sep"></div>
       <button id="dropdownLogout" class="ndd-item ndd-danger" type="button">Sign out</button>`;
     document.body.appendChild(dd);
     wireImgFallback(dd);
+    document.getElementById("dropdownBilling").onclick = () => { dd.remove(); openBillingPanel(user); };
     document.getElementById("dropdownLogout").onclick = async () => {
       try { await api("/api/auth?action=logout", { method: "POST" }); } catch {}
       location.href = "/";
     };
   });
+}
+
+function openBillingPanel(user) {
+  const normPlan = (p) => ({ patrol: "free", sergeant: "pro", commander: "ultra", network: "ultra" }[p] || p || "free");
+  const plan = normPlan(user.plan);
+  const planName = { free: "Gatherly Free", pro: "Gatherly Pro", ultra: "Gatherly Ultra" }[plan] || "Gatherly Free";
+  const planColor = { free: "#6b7280", pro: "#818cf8", ultra: "#f59e0b" }[plan];
+  const expiry = user.planExpiry ? new Date(user.planExpiry) : null;
+  const expiryStr = expiry ? expiry.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+  const isActive = expiry ? expiry > new Date() : plan === "free";
+  const isPaid = plan !== "free";
+
+  const overlay = document.createElement("div");
+  overlay.id = "billingPanel";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);padding:16px";
+  overlay.innerHTML = `
+    <div style="background:#0f1117;border:1px solid rgba(255,255,255,.08);border-radius:16px;width:100%;max-width:420px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+      <div style="padding:20px 24px 0;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;opacity:.4">Billing &amp; plan</span>
+        <button id="billingClose" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:1.2rem;cursor:pointer;line-height:1;padding:4px">&#x2715;</button>
+      </div>
+
+      <div style="padding:20px 24px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span style="font-size:1.35rem;font-weight:700">${esc(planName)}</span>
+          <span style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:20px;background:${planColor}22;color:${planColor};border:1px solid ${planColor}44">${isPaid ? (isActive ? "Active" : "Expired") : "Free"}</span>
+        </div>
+        ${isPaid && expiryStr ? `<p style="font-size:.82rem;opacity:.5;margin:0 0 16px">${isActive ? "Renews" : "Expired"} ${esc(expiryStr)}</p>` : `<p style="font-size:.82rem;opacity:.5;margin:0 0 16px">No active subscription</p>`}
+
+        <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+          <div style="font-size:.7rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.35;margin-bottom:10px">Account</div>
+          <div style="display:grid;gap:8px">
+            <div style="display:flex;justify-content:space-between;font-size:.82rem">
+              <span style="opacity:.55">Discord username</span>
+              <span style="font-weight:600">${esc(user.username)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:.82rem">
+              <span style="opacity:.55">User ID</span>
+              <span style="font-family:monospace;font-size:.78rem;opacity:.7">${esc(user.id)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:.82rem">
+              <span style="opacity:.55">Boost credits</span>
+              <span style="font-weight:600;color:var(--signal)">${user.credits ?? 0}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:8px" id="billingActions">
+          ${isPaid ? `<button id="billingPortal" class="btn btn-ghost" style="width:100%;justify-content:center">Manage or cancel subscription &rarr;</button>` : ""}
+          ${plan !== "ultra" ? `<a href="/pricing" class="btn btn-primary" style="width:100%;justify-content:center;text-align:center">Upgrade plan</a>` : ""}
+          ${!isPaid ? `<p style="font-size:.78rem;opacity:.4;text-align:center;margin:4px 0 0">No active subscription to manage.</p>` : ""}
+        </div>
+        <p id="billingMsg" style="font-size:.78rem;margin:10px 0 0;text-align:center"></p>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  document.getElementById("billingClose").onclick = () => overlay.remove();
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const portalBtn = document.getElementById("billingPortal");
+  if (portalBtn) {
+    portalBtn.onclick = async () => {
+      portalBtn.disabled = true;
+      portalBtn.textContent = "Opening…";
+      const msg = document.getElementById("billingMsg");
+      try {
+        const d = await api("/api/billing?action=portal", { method: "POST" });
+        if (d.url) location.href = d.url;
+        else { msg.textContent = d.error || "Could not open billing portal."; msg.style.color = "var(--bad)"; portalBtn.disabled = false; portalBtn.textContent = "Manage or cancel subscription →"; }
+      } catch {
+        msg.textContent = "Something went wrong. Try again.";
+        msg.style.color = "var(--bad)";
+        portalBtn.disabled = false;
+        portalBtn.textContent = "Manage or cancel subscription →";
+      }
+    };
+  }
 }
 
 const PLAN_NAMES = { free: "Gatherly", pro: "Gatherly Pro", ultra: "Gatherly Ultra" };
