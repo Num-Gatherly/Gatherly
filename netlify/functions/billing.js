@@ -195,6 +195,20 @@ async function handler(req) {
     }).catch(() => {});
     return json({ ok: true, plan: "ultra" });
   }
+if (action === "portal" && req.method === "POST") {
+    if (!user.stripeCustomerId) return json({ error: "No billing account found." }, 400);
+    const sk = process.env.STRIPE_SECRET_KEY;
+    const r = await fetchT("https://api.stripe.com/v1/billing_portal/sessions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sk}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ customer: user.stripeCustomerId, return_url: `${siteUrl}/dashboard` }),
+    });
+    const d = await r.json();
+    if (!r.ok) return json({ error: d.error?.message || "Could not open billing portal." }, 502);
+    return json({ url: d.url });
+  }
 
+  return json({ error: "Unknown action." }, 404);
+}
   return json({ error: "Unknown action." }, 404);
 }
