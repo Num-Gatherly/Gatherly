@@ -16,6 +16,12 @@ if (!me) {
 } else {
   const rank = planRank(me.plan);
   const credits = me.credits ?? 0;
+  $("billingBtn").onclick = async () => {
+  try {
+    const d = await api("/api/billing?action=portal", { method: "POST" });
+    if (d.url) location.href = d.url;
+  } catch (e) { say(e.message); }
+};
   $("hello").innerHTML = `Signed in as <b>${esc(me.username)}</b>${me.globalName && me.globalName !== me.username ? ` <span style="color:var(--muted);font-size:.88rem">(${esc(me.globalName)})</span>` : ""} &middot; <span style="color:var(--signal)">${esc(planLabel(me.plan))}</span> &middot; <span style="color:var(--live);font-weight:600">${credits} boost credit${credits === 1 ? "" : "s"}</span>`;
 
   if (rank < 2) {
