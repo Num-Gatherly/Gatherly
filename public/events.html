@@ -8,47 +8,232 @@
   <link rel="preconnect" href="https://api.fontshare.com">
   <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600&f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* ---- hero ---- */
+    .disc-hero {
+      padding: 56px 0 36px;
+      position: relative;
+      overflow: hidden;
+    }
+    .disc-hero::before {
+      content: "";
+      position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 50% 80% at 5% 50%, rgba(62,108,224,0.14) 0%, transparent 65%),
+        radial-gradient(ellipse 40% 60% at 95% 20%, rgba(105,217,156,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 50% 110%, rgba(255,180,84,0.06) 0%, transparent 55%);
+    }
+    .disc-hero-inner { position: relative; }
+    .disc-hero-kicker {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--signal); margin-bottom: 14px;
+    }
+    .disc-hero-kicker::before { content: ""; width: 20px; height: 1px; background: var(--signal); }
+    .disc-hero h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.08; margin-bottom: 12px; }
+    .disc-hero p { max-width: 520px; font-size: 1rem; color: var(--muted); margin-bottom: 28px; }
+
+    /* ---- pulse bar ---- */
+    .disc-pulse {
+      display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 32px;
+    }
+    .disc-pulse-stat {
+      display: flex; align-items: center; gap: 8px; font-size: .85rem;
+    }
+    .disc-pulse-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .disc-pulse-dot.live { background: var(--live); box-shadow: 0 0 0 3px rgba(255,180,84,0.2); animation: pulse 1.6s infinite; }
+    .disc-pulse-dot.up { background: var(--good); }
+    .disc-pulse-stat b { color: var(--text); }
+
+    /* ---- search + filters ---- */
+    .disc-search-wrap {
+      background: rgba(13,18,26,0.7); border: 1px solid rgba(127,168,255,0.2);
+      border-radius: 16px; padding: 16px 18px;
+      backdrop-filter: blur(12px);
+    }
+    .disc-search-row {
+      display: flex; gap: 10px; align-items: center; margin-bottom: 14px;
+    }
+    .disc-search-icon { color: var(--muted); flex-shrink: 0; }
+    .disc-search-input {
+      flex: 1; background: none; border: none; outline: none;
+      font-family: var(--font-body); font-size: .95rem; color: var(--text);
+    }
+    .disc-search-input::placeholder { color: var(--muted); }
+    .disc-search-divider { width: 1px; height: 20px; background: var(--line-strong); flex-shrink: 0; }
+    .disc-tz-input {
+      background: none; border: none; outline: none; font-family: var(--font-body);
+      font-size: .82rem; color: var(--muted); cursor: pointer; max-width: 160px;
+    }
+    .disc-tz-input:focus { color: var(--text); }
+    option { background: #111824; }
+
+    .disc-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .disc-filter-label { font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-right: 4px; flex-shrink: 0; }
+    .disc-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 12px; border-radius: 999px; font-size: .8rem; font-weight: 600;
+      border: 1px solid var(--line-strong); background: transparent; color: var(--muted);
+      cursor: pointer; transition: all .15s; font-family: var(--font-body);
+      white-space: nowrap;
+    }
+    .disc-chip:hover { border-color: rgba(127,168,255,0.5); color: var(--text); background: rgba(127,168,255,0.06); }
+    .disc-chip.active { border-color: var(--signal); color: var(--signal); background: rgba(127,168,255,0.12); }
+    .disc-chip.live-chip.active { border-color: var(--live); color: var(--live); background: rgba(255,180,84,0.1); }
+    .disc-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .disc-filter-sep { width: 1px; height: 18px; background: var(--line); flex-shrink: 0; margin: 0 2px; }
+
+    /* ---- event grid ---- */
+    .disc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+
+    /* ---- enhanced event cards ---- */
+    .ev-card {
+      border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+      background: linear-gradient(160deg, var(--panel) 0%, var(--ink-2) 100%);
+      display: flex; flex-direction: column;
+      transition: border-color .18s, transform .18s, box-shadow .18s;
+      position: relative;
+    }
+    .ev-card:hover { border-color: rgba(127,168,255,0.4); transform: translateY(-3px); box-shadow: 0 16px 40px -16px rgba(0,0,0,0.5); }
+    .ev-card.boosted { border-color: rgba(255,80,80,0.35); }
+    .ev-card.boosted:hover { border-color: rgba(255,80,80,0.6); box-shadow: 0 16px 40px -16px rgba(255,80,80,0.3); }
+    .ev-card.is-live { border-color: rgba(255,180,84,0.35); }
+    .ev-card.is-live:hover { border-color: rgba(255,180,84,0.6); box-shadow: 0 16px 40px -16px rgba(255,180,84,0.2); }
+
+    .ev-boost-bar {
+      padding: 7px 16px; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      background: linear-gradient(90deg, rgba(255,60,60,0.18), rgba(255,60,60,0.04));
+      border-bottom: 1px solid rgba(255,80,80,0.2); color: #ff8080;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .ev-boost-bar::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #ff6060; animation: pulse 1.4s infinite; flex-shrink: 0; }
+
+    .ev-banner {
+      aspect-ratio: 16/7; background: linear-gradient(120deg, var(--panel-2), var(--ink-2));
+      position: relative; overflow: hidden;
+    }
+    .ev-banner img { width: 100%; height: 100%; object-fit: cover; }
+    .ev-banner-badges { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .ev-banner-scenario {
+      position: absolute; bottom: 10px; right: 10px;
+      background: rgba(9,13,19,0.82); border: 1px solid var(--line-strong);
+      border-radius: 8px; padding: 4px 10px; font-size: .72rem; font-weight: 600;
+      color: var(--text); backdrop-filter: blur(8px);
+    }
+
+    .ev-body { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+    .ev-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: var(--text); line-height: 1.2; margin: 0; }
+    .ev-desc { font-size: .82rem; color: var(--muted); margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+    .ev-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: .78rem; color: var(--muted); }
+    .ev-meta-item { display: flex; align-items: center; gap: 4px; }
+    .ev-meta-item svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+    .ev-live-bar {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      background: rgba(255,180,84,0.08); border: 1px solid rgba(255,180,84,0.2);
+      border-radius: 8px; font-size: .8rem;
+    }
+    .ev-live-bar .ldot { width: 7px; height: 7px; border-radius: 50%; background: var(--live); animation: pulse 1.6s infinite; flex-shrink: 0; }
+    .ev-live-bar b { color: var(--live); }
+
+    .ev-footer { display: flex; gap: 8px; align-items: center; margin-top: auto; padding-top: 4px; }
+    .ev-host { font-size: .75rem; color: var(--muted); flex: 1; }
+    .ev-host b { color: var(--text); }
+
+    .ev-code-out { font-size: .85rem; padding: 8px 12px; border-radius: 8px; }
+
+    /* ---- empty / loading ---- */
+    .disc-empty { padding: 48px 24px; text-align: center; border: 1px dashed var(--line-strong); border-radius: 16px; color: var(--muted); }
+    .disc-empty h3 { color: var(--text); margin-bottom: 8px; }
+    .disc-loading { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 48px 0; color: var(--muted); font-size: .85rem; }
+
+    /* ---- result count ---- */
+    .disc-count { font-size: .8rem; color: var(--muted); margin-bottom: 14px; }
+    .disc-count b { color: var(--text); }
+
+    @media (max-width: 700px) {
+      .disc-grid { grid-template-columns: 1fr; }
+      .disc-search-row { flex-wrap: wrap; }
+    }
+  </style>
 </head>
 <body>
 <nav id="nav"></nav>
 
-<header class="section" style="padding-bottom:8px">
-  <div class="wrap">
-    <span class="kicker">Discover</span>
-    <h1 style="font-size:clamp(2rem,4vw,3rem)">Live and upcoming events</h1>
-    <p style="margin-top:10px;max-width:560px">Boosted events sit up top with a red highlight. Search by name, host, or scenario, or filter the feed.</p>
+<header class="disc-hero">
+  <div class="wrap disc-hero-inner">
+    <div class="disc-hero-kicker">Discover</div>
+    <h1>Find your next<br><span style="color:var(--signal)">ER:LC session</span></h1>
+    <p>Live and upcoming events — boosted sessions up top. Join with one tap.</p>
 
-    <div class="discover-controls">
-      <input class="discover-search" id="searchInput" placeholder="Search events, hosts, scenarios&hellip;" autocomplete="off">
-      <div class="filter-chips">
-        <button class="chip active" data-filter="all">All</button>
-        <button class="chip" data-filter="live">Live now</button>
-        <button class="chip" data-filter="upcoming">Upcoming</button>
-        <button class="chip" data-filter="boosted">Boosted</button>
-        <button class="chip" data-filter="members">Most players</button>
+    <div class="disc-pulse" id="discPulse">
+      <div class="disc-pulse-stat"><span class="disc-pulse-dot live"></span><b id="liveCount">—</b> live now</div>
+      <div class="disc-pulse-stat"><span class="disc-pulse-dot up"></span><b id="upCount">—</b> upcoming</div>
+    </div>
+
+    <!-- unified search + filter panel -->
+    <div class="disc-search-wrap">
+      <div class="disc-search-row">
+        <svg class="disc-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="disc-search-input" id="searchInput" placeholder="Search events, hosts, scenarios…" autocomplete="off">
+        <div class="disc-search-divider"></div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <select class="disc-tz-input" id="tzSelect" title="Your timezone">
+          <option value="">My timezone</option>
+        </select>
+      </div>
+
+      <div class="disc-filters">
+        <span class="disc-filter-label">Status</span>
+        <button class="disc-chip active" data-filter="all">All events</button>
+        <button class="disc-chip live-chip" data-filter="live"><span class="disc-chip-dot"></span>Live now</button>
+        <button class="disc-chip" data-filter="upcoming">Upcoming</button>
+        <button class="disc-chip" data-filter="boosted">⚡ Boosted</button>
+        <button class="disc-chip" data-filter="members">👥 Most players</button>
+
+        <div class="disc-filter-sep"></div>
+        <span class="disc-filter-label">Scenario</span>
+        <button class="disc-chip" data-scenario="">Any</button>
+        <button class="disc-chip" data-scenario="border-patrol">Border Patrol</button>
+        <button class="disc-chip" data-scenario="pursuit">Pursuit</button>
+        <button class="disc-chip" data-scenario="court-trial">Court Trial</button>
+        <button class="disc-chip" data-scenario="weather-hazard">Weather Hazard</button>
+        <button class="disc-chip" data-scenario="department-tryout">Dept. Tryout</button>
+        <button class="disc-chip" data-scenario="miscellaneous-event">Misc.</button>
+
+        <div class="disc-filter-sep"></div>
+        <span class="disc-filter-label">Duration</span>
+        <button class="disc-chip" data-duration="">Any</button>
+        <button class="disc-chip" data-duration="short">≤ 1h</button>
+        <button class="disc-chip" data-duration="medium">1–2h</button>
+        <button class="disc-chip" data-duration="long">2h+</button>
       </div>
     </div>
   </div>
 </header>
 
-<section class="wrap" style="padding-bottom:60px">
+<section class="wrap" style="padding: 24px 0 80px">
   <div class="layout-rail">
-    <div class="grid grid-2" id="feed"><p>Loading&hellip;</p></div>
+    <div>
+      <p class="disc-count" id="discCount" hidden></p>
+      <div class="disc-grid" id="feed"></div>
+    </div>
     <aside class="ad-rail">
       <div class="ad-slot ad-slot--side" data-ad-slot="events-side"></div>
-      <div class="card" style="text-align:center">
-        <h3 style="font-size:1.02rem">Want your event here?</h3>
-        <p style="font-size:.85rem;margin-top:6px">List in under two minutes and reach players already browsing this feed.</p>
-        <a href="/advertise" class="btn btn-primary btn-sm" style="margin-top:14px;width:100%">Advertise your event</a>
+      <div class="card" style="text-align:center; border-color:rgba(127,168,255,0.2)">
+        <div style="font-size:1.4rem;margin-bottom:8px">🚀</div>
+        <h3 style="font-size:1rem;margin-bottom:8px">List your event</h3>
+        <p style="font-size:.82rem;margin-top:0">Reach players already browsing this feed.</p>
+        <a href="/advertise" class="btn btn-primary btn-sm" style="margin-top:12px;width:100%">Advertise free</a>
       </div>
     </aside>
   </div>
 </section>
 
 <div class="wrap"><div class="ad-slot" data-ad-slot="events-bottom"></div></div>
-
 <footer id="footer"></footer>
-
 <script type="module" src="/js/pages/events.js"></script>
 </body>
 </html>
