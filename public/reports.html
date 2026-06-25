@@ -9,28 +9,19 @@
   <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600&f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* ---- landing ---- */
-    .rep-landing { display:flex; gap:16px; flex-wrap:wrap; margin:36px 0 48px; }
-    .rep-landing-card {
-      flex:1; min-width:260px; border:1px solid var(--line); border-radius:18px;
-      padding:28px; cursor:pointer; background:linear-gradient(135deg,var(--panel),var(--ink-2));
-      transition:border-color .18s, transform .18s, box-shadow .18s;
-      text-align:left;
-    }
-    .rep-landing-card:hover { border-color:rgba(127,168,255,0.5); transform:translateY(-3px); box-shadow:0 16px 40px -16px rgba(62,108,224,0.3); }
-    .rep-landing-card.active { border-color:var(--signal); background:linear-gradient(135deg,rgba(127,168,255,0.1),var(--ink-2)); }
-    .rep-landing-card .rlc-icon { width:44px;height:44px;border-radius:12px;background:rgba(127,168,255,0.12);border:1px solid rgba(127,168,255,0.2);display:flex;align-items:center;justify-content:center;margin-bottom:16px; }
-    .rep-landing-card h3 { margin:0 0 6px; font-size:1.1rem; }
-    .rep-landing-card p { font-size:.85rem; margin:0; }
+    body { background:
+      radial-gradient(ellipse 70% 50% at 5% 0%, rgba(79,70,229,0.07) 0%, transparent 50%),
+      radial-gradient(ellipse 50% 35% at 95% 100%, rgba(74,222,128,0.04) 0%, transparent 45%),
+      var(--ink); }
 
-    /* ---- report list ---- */
-    .rep-list { display:flex; flex-direction:column; gap:12px; margin-bottom:36px; }
+    /* report list */
+    .rep-list { display:flex; flex-direction:column; gap:10px; margin-bottom:36px; }
     .rep-list-item {
-      border:1px solid var(--line); border-radius:14px; overflow:hidden;
+      border:1px solid var(--line); border-radius:12px; overflow:hidden;
       background:linear-gradient(135deg,var(--panel),var(--ink-2));
       transition:border-color .15s;
     }
-    .rep-list-item:hover { border-color:rgba(127,168,255,0.35); }
+    .rep-list-item:hover { border-color:rgba(129,140,248,0.35); }
     .rep-list-header {
       display:flex; align-items:center; gap:16px; padding:18px 22px;
       cursor:pointer; width:100%; text-align:left; background:none; border:none; color:inherit;
@@ -47,26 +38,25 @@
     .rep-list-body { display:none; border-top:1px solid var(--line); }
     .rep-list-item.open .rep-list-body { display:block; }
 
-    /* ---- collapsible analytics boxes ---- */
+    /* collapsible analytics boxes */
     details.rep-box { padding:0; overflow:hidden; }
     details.rep-box summary {
       display:flex; align-items:center; justify-content:space-between;
-      padding:18px 20px; cursor:pointer; list-style:none; gap:12px;
-      user-select:none;
+      padding:16px 20px; cursor:pointer; list-style:none; gap:12px; user-select:none;
     }
     details.rep-box summary::-webkit-details-marker { display:none; }
     details.rep-box summary .rep-sum-left { flex:1; min-width:0; }
     details.rep-box summary .rep-sum-icon {
-      width:28px; height:28px; border-radius:8px; background:rgba(127,168,255,0.1);
+      width:28px; height:28px; border-radius:7px; background:rgba(129,140,248,0.08);
       display:flex; align-items:center; justify-content:center; flex-shrink:0;
-      color:var(--signal); font-size:.8rem; transition:background .15s;
+      color:var(--signal); transition:background .15s;
     }
-    details.rep-box[open] summary .rep-sum-icon { background:rgba(127,168,255,0.2); }
-    details.rep-box summary .rep-sum-arrow { font-size:.75rem; color:var(--muted); transition:transform .2s; flex-shrink:0; }
+    details.rep-box[open] summary .rep-sum-icon { background:rgba(129,140,248,0.16); }
+    details.rep-box summary .rep-sum-arrow { font-size:.72rem; color:var(--muted); transition:transform .2s; flex-shrink:0; }
     details.rep-box[open] summary .rep-sum-arrow { transform:rotate(180deg); }
     details.rep-box .rep-box-body { padding:4px 20px 20px; border-top:1px solid var(--line); }
     details.rep-box summary .rep-kick { margin:0 0 2px; font-size:.63rem; }
-    details.rep-box summary h3 { margin:0; font-size:.95rem; }
+    details.rep-box summary h3 { margin:0; font-size:.93rem; }
   </style>
 </head>
 <body>
@@ -74,36 +64,55 @@
 
 <header class="section" style="padding-bottom:28px">
   <div class="wrap">
-    <span class="kicker">Engagement reports</span>
-    <h1 style="font-size:clamp(2rem,4vw,3rem)">Verified numbers, not vibes</h1>
-    <p style="margin-top:10px;max-width:580px">Every report is compiled from live ER:LC API data — scored, benchmarked, and summarised by AI. Pick an option below.</p>
+    <span class="kicker">Engagement Reports</span>
+    <h1 style="margin-top:10px">Verified numbers,<br>not vibes</h1>
+    <p style="margin-top:12px;max-width:520px;font-size:1rem">Every report is compiled from live ER:LC API data — scored, benchmarked against the platform, and summarised by AI.</p>
   </div>
 </header>
 
 <section class="wrap" style="padding-bottom:80px">
 
   <!-- landing cards -->
-  <div class="rep-landing" id="repLanding">
-    <button class="rep-landing-card" id="btnMyReports" style="display:none">
-      <div class="rlc-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+  <div class="rep-landing-v2" id="repLanding">
+
+    <button class="rep-card-v2" id="btnMyReports" style="display:none">
+      <div class="rep-card-icon" style="background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.2);color:var(--signal)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       </div>
-      <h3>My reports</h3>
-      <p style="color:var(--muted)">View all your past event reports. Click any to expand the full analysis.</p>
-    </button>
-    <button class="rep-landing-card" id="btnExample">
-      <div class="rlc-icon" style="background:rgba(105,217,156,0.1);border-color:rgba(105,217,156,0.2);color:var(--good)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      <div>
+        <h3 style="margin:0 0 6px;font-size:1.08rem">My reports</h3>
+        <p style="margin:0;font-size:.85rem">Your past event data, scored and benchmarked against the platform average.</p>
       </div>
-      <h3>Preview example report</h3>
-      <p style="color:var(--muted)">See a full Ultra Report filled with realistic sample data — every analytic unlocked.</p>
+      <ul class="rep-card-features">
+        <li>Health score, rings &amp; player funnel</li>
+        <li>Staff intelligence &amp; leaderboard</li>
+        <li>Delivery confirmation</li>
+      </ul>
+      <div class="rep-card-cta">Open my reports <span style="opacity:.6">→</span></div>
     </button>
+
+    <button class="rep-card-v2 featured" id="btnExample">
+      <div class="rep-card-icon" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.2);color:var(--good)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </div>
+      <div>
+        <h3 style="margin:0 0 6px;font-size:1.08rem">Preview example report</h3>
+        <p style="margin:0;font-size:.85rem">A fully unlocked Ultra Report with realistic sample data — every analytic filled in.</p>
+      </div>
+      <ul class="rep-card-features">
+        <li>All 20+ analytics &amp; ultra intelligence</li>
+        <li>AI summary, forecasting &amp; villain detection</li>
+        <li>See exactly what each plan unlocks</li>
+      </ul>
+      <div class="rep-card-cta" style="color:var(--good)">Preview now <span style="opacity:.6">→</span></div>
+    </button>
+
   </div>
 
   <!-- loading spinner -->
   <div id="loading" hidden style="text-align:center;padding:40px 0">
     <div class="radar mini" id="loadRadar"></div>
-    <p style="margin-top:38px;font-size:.85rem;letter-spacing:.1em;text-transform:uppercase">Loading reports&hellip;</p>
+    <p style="margin-top:38px;font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Loading reports&hellip;</p>
   </div>
 
   <!-- my reports list -->
@@ -114,7 +123,7 @@
   <!-- single expanded report -->
   <div id="report" hidden></div>
 
-  <p class="note" style="margin-top:26px">Live reports generate from your <a href="/dashboard">dashboard</a> the moment an event ends. Connect your ER:LC API key in <a href="/settings">Settings</a> to enable them.</p>
+  <p class="note" style="margin-top:24px;font-size:.82rem">Live reports generate from your <a href="/dashboard">dashboard</a> the moment an event ends. Connect your ER:LC API key in <a href="/settings">Settings</a> to enable them.</p>
 </section>
 
 <div class="wrap"><div class="ad-slot" data-ad-slot="reports-bottom"></div></div>
