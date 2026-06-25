@@ -16,22 +16,52 @@ const safeNum = (v, fallback = 0) => (Number.isFinite(Number(v)) ? Number(v) : f
 const PLAN_DISPLAY = { pro: "Gatherly Pro", ultra: "Gatherly Ultra" };
 const lockIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
 
+/* Icon map for box summaries */
+const BOX_ICON = {
+  "Health Score": "📊", "Player lifecycle funnel": "🔽", "Players over the window": "📈",
+  "Scenario benchmark": "🏆", "Scenario DNA": "🧬", "Scenario fatigue index": "🔄",
+  "Dead hour detection": "🕐", "Loyalty tracker": "❤️", "Staff ratio alerts": "⚠️",
+  "Best-time-to-host heatmap": "🗓️", "Discord webhook delivery": "📡",
+  "AI-generated report summary": "🤖", "Predictive forecasting": "🔮",
+  "Villain detection": "🚨", "Ghost staff detection": "👻", "Staff fatigue score": "😴",
+  "Queue intelligence": "⏳", "Golden hour analysis": "⭐", "Moderation pressure map": "🗺️",
+  "Server health trend line": "📉", "Tipping point analysis": "⚡", "Weekly performance report": "📅",
+  "Bot DM report delivery": "📬",
+};
+
 function box(title, bodyHtml, opts = {}) {
   const { tier, userPlan, accent, kicker } = opts;
-  const head = `${kicker ? `<div class="rep-kick">${esc(kicker)}</div>` : ""}${title ? `<h3>${title}</h3>` : ""}`;
-  const styleAttr = accent ? ` style="border-left:3px solid ${accent}"` : "";
   const locked = tier && planRank(userPlan) < planRank(tier);
-  if (!locked) return `<div class="card rep-box"${styleAttr}>${head}${bodyHtml}</div>`;
   const name = PLAN_DISPLAY[tier] || "Gatherly Pro";
-  return `<div class="card rep-box locked"${styleAttr}>
-    <div class="locked-inner">${head}${bodyHtml}</div>
-    <div class="locked-overlay">
-      <span class="lock-badge">${lockIcon} ${esc(name)}</span>
-      <div class="lock-title">Unlock ${esc((title || "this insight").replace(/<[^>]+>/g, ""))}</div>
-      <div class="lock-sub">Part of your ${esc(name)} analytics. Upgrade once and it's filled in on every report you run from now on.</div>
-      <a class="btn btn-primary btn-sm" href="/pricing">Unlock with ${esc(name)}</a>
+  const accentStyle = accent ? `border-left:3px solid ${accent};` : "";
+  const icon = BOX_ICON[title] || "📋";
+
+  const summaryHead = `
+    <div class="rep-sum-left">
+      ${kicker ? `<div class="rep-kick">${esc(kicker)}</div>` : ""}
+      ${title ? `<h3>${title}${locked ? ` <span style="font-size:.7rem;color:var(--muted);font-weight:500;margin-left:6px">${lockIcon} ${esc(name)}</span>` : ""}</h3>` : ""}
     </div>
-  </div>`;
+    <span class="rep-sum-icon">${icon}</span>
+    <span class="rep-sum-arrow">&#9660;</span>`;
+
+  if (!locked) {
+    return `<details class="card rep-box" style="${accentStyle}">
+      <summary>${summaryHead}</summary>
+      <div class="rep-box-body">${bodyHtml}</div>
+    </details>`;
+  }
+
+  return `<details class="card rep-box" style="${accentStyle}">
+    <summary>${summaryHead}</summary>
+    <div class="rep-box-body">
+      <div class="locked-overlay" style="position:static;background:none;border-radius:10px;border:1px solid rgba(127,168,255,0.2);padding:20px;text-align:center;backdrop-filter:none">
+        <span class="lock-badge" style="display:inline-flex;margin-bottom:10px">${lockIcon} ${esc(name)}</span>
+        <div class="lock-title" style="margin-bottom:6px">Unlock ${esc((title || "this insight").replace(/<[^>]+>/g, ""))}</div>
+        <div class="lock-sub" style="margin-bottom:14px;max-width:none">Upgrade once and it's filled in on every report automatically.</div>
+        <a class="btn btn-primary btn-sm" href="/pricing">Unlock with ${esc(name)}</a>
+      </div>
+    </div>
+  </details>`;
 }
 
 const sectionHeader = (label, sub) => `
@@ -395,17 +425,28 @@ export function renderReport(el, r) {
     </div>
   </div>`;
 
+  /* ---- staff collapsible ---- */
+  const staffCollapsible = `
+  <details class="card rep-box" style="margin-bottom:0">
+    <summary>
+      <div class="rep-sum-left"><h3>Staff audit</h3></div>
+      <span class="rep-sum-icon">👥</span>
+      <span class="rep-sum-arrow">&#9660;</span>
+    </summary>
+    <div class="rep-box-body">${staffBlock.replace(/^<div class="card rep-box">|<\/div>$/, "")}</div>
+  </details>`;
+
   /* ---- assemble ---- */
   el.innerHTML = `
   ${hero}
 
   ${sectionHeader("Analytics", "Post-event analytics · Gatherly Pro & Ultra")}
-  <div class="grid grid-2 rep-grid">${analytics}</div>
+  <div class="rep-details-stack">${analytics}</div>
 
   ${sectionHeader("Ultra Intelligence", "Deep-signal layer · Gatherly Ultra")}
-  <div class="grid grid-2 rep-grid">${ultra}</div>
+  <div class="rep-details-stack">${ultra}</div>
 
-  <div style="margin:26px 0 18px">${staffBlock}</div>
+  <div style="margin:26px 0 18px">${staffCollapsible}</div>
 
   ${upsell}
 
@@ -533,7 +574,6 @@ function initChat(reportData) {
   async function send() {
     const text = input.value.trim();
     if (!text) return;
-    input.value = "";
     input.value = "";
     input.style.height = "auto";
     addMsg("user", text);
