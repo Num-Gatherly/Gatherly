@@ -1,13 +1,9 @@
-import { boot, renderRadar, api, esc, currentUser, planRank } from "/js/app.js";
+import { boot, renderRadar, api, esc, fmtLocal, currentUser, planRank } from "/js/app.js";
 import { renderReport } from "/js/report.js";
 boot("/reports");
 
-renderRadar(document.getElementById("loadRadar"), [{ title: "Compiling", scenario: "report", live: true }], "");
-
+/* ---- sample data for the exemplar Ultra Report ---- */
 const t0 = Date.now();
-// The /reports sample is rendered as the exemplar Ultra Report — every Gatherly
-// Ultra analytic box is filled with realistic sample data so hosts see the full
-// picture they get from an event. plan: "ultra" unlocks every section.
 const SAMPLE = {
   plan: "ultra", isExemplar: true,
   eventTitle: "Friday Night Border Patrol", serverName: "Liberty County RP", scenario: "Border patrol", score: 78,
@@ -28,14 +24,12 @@ const SAMPLE = {
       { name: "Cpl_Vance", permission: "Server Moderator", team: "Sheriff", moderations: 8 },
     ],
   },
-  // ANALYTICS (Pro)
   scenarioDNA: { scenarios: [{ scenario: "Border patrol", runs: 9, avgScore: 74, avgRetention: 61 }, { scenario: "Bank heist", runs: 6, avgScore: 68, avgRetention: 54 }, { scenario: "Traffic enforcement", runs: 5, avgScore: 71, avgRetention: 58 }], advice: "Border patrol is your strongest format — keep it on Friday nights." },
   scenarioFatigue: { avgScoreEarly: 79, avgScoreRecent: 71, fatigued: false, advice: "Scores are holding steady across repeats. No fatigue detected yet." },
   deadHour: { advice: "A quiet 11-minute stretch was found at the 40-minute mark. Pre-announce the next code earlier to bridge it." },
   loyaltyTracker: { returningPlayers: 38, newPlayers: 33, returningRate: 54, advice: "Over half your room are returners — a fixed weekly slot keeps them locked in." },
-  staffRatioAlert: { advice: "Player-to-staff ratio peaked at 12:1 at the busiest point. Comfortable, but one more mod adds headroom." },
+  staffRatioAlert: { advice: "Player-to-staff ratio peaked at 12:1. Comfortable, but one more mod adds headroom." },
   bestTimeHeatmap: null,
-  // ULTRA INTELLIGENCE
   villainDetection: { disruptors: [{ player: "xX_Drift_Xx", timesKilled: 7, staffActed: true }, { player: "RandomCiv22", timesKilled: 4, staffActed: false }], advice: "RandomCiv22 was never actioned despite repeat RDM — flag for your staff team." },
   ghostStaff: { ghosts: [{ name: "Cadet_Reyes" }], advice: "1 staff member sat online without issuing a command. Re-balance the roster." },
   staffFatigue: { firstHalfAvgResponseMin: 1.8, secondHalfAvgResponseMin: 3.1, fatigued: false, advice: "Response held up well across the event. Solid staffing." },
@@ -49,6 +43,82 @@ const SAMPLE = {
   delivery: { dm: true, webhook: true, recipient: true },
 };
 
+/* ---- colour helper ---- */
+const scoreColor = (s) => s >= 70 ? "#69d99c" : s >= 45 ? "#7fa8ff" : "#ff7a7a";
+
+/* ---- mini ring for the report list ---- */
+function miniRing(value, max, color, label) {
+  const r = 20, sw = 4, c = 2 * Math.PI * r;
+  const pct = Math.min(1, Math.max(0, value / (max || 1)));
+  const off = c * (1 - pct);
+  return `
+  <div class="rep-list-ring" title="${label}: ${value}">
+    <svg viewBox="0 0 48 48" width="52" height="52">
+      <circle cx="24" cy="24" r="${r}" fill="none" stroke="rgba(148,170,205,0.12)" stroke-width="${sw}"/>
+      <circle cx="24" cy="24" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}"
+        stroke-linecap="round" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/>
+    </svg>
+    <div class="rep-list-ring-val" style="color:${color}">${value}</div>
+  </div>`;
+}
+
+/* ---- render the my-reports list ---- */
+function renderReportList(events, userPlan) {
+  const listEl = document.getElementById("repListInner");
+  if (!events.length) {
+    listEl.innerHTML = `<div class="card" style="padding:32px;text-align:center;color:var(--muted)">No reports yet. Run an event with your ER:LC API key connected to generate your first report. <a href="/settings">Connect in Settings</a>.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = events.map((ev, idx) => {
+    const r = ev.lastReport;
+    const score = r.score ?? 0;
+    const peak = r.peakConcurrent ?? 0;
+    const maxP = r.maxPlayers ?? 50;
+    const ret = r.retained30 ?? 0;
+    const joins = r.joinsInWindow ?? 1;
+    const retPct = Math.min(100, Math.round((ret / Math.max(joins, 1)) * 100));
+    const dateStr = r.windowStart ? fmtLocal(r.windowStart) : (ev.startsAt ? fmtLocal(ev.startsAt) : "");
+    return `
+    <div class="rep-list-item" id="rli-${idx}">
+      <button class="rep-list-header" data-idx="${idx}">
+        <div class="rep-list-rings">
+          ${miniRing(score, 100, scoreColor(score), "Health score")}
+          ${miniRing(peak, maxP, "#7fa8ff", "Peak concurrent")}
+          ${miniRing(retPct, 100, "#ffb454", "Retention %")}
+        </div>
+        <div class="rep-list-meta">
+          <h4>${esc(ev.title || r.eventTitle || "Event")}</h4>
+          <p>${esc(r.serverName || "")} &middot; ${esc(r.scenario || "")} &middot; ${dateStr}</p>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <span class="badge">Score ${score}/100</span>
+            <span class="badge">${peak} peak</span>
+            <span class="badge">${ret} retained</span>
+            ${r.delivery?.dm ? `<span class="badge badge-good">DM sent</span>` : ""}
+          </div>
+        </div>
+        <span class="rep-list-chevron">&#9660;</span>
+      </button>
+      <div class="rep-list-body" id="rlb-${idx}"></div>
+    </div>`;
+  }).join("");
+
+  /* wire expand/collapse */
+  listEl.querySelectorAll(".rep-list-header").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = btn.dataset.idx;
+      const item = document.getElementById(`rli-${idx}`);
+      const body = document.getElementById(`rlb-${idx}`);
+      const isOpen = item.classList.toggle("open");
+      if (isOpen && !body.dataset.loaded) {
+        body.dataset.loaded = "1";
+        renderReport(body, events[idx].lastReport, userPlan);
+      }
+    });
+  });
+}
+
+/* ---- notice banner ---- */
 function notice(el, html) {
   const n = document.createElement("div");
   n.className = "alert alert-ok";
@@ -57,30 +127,69 @@ function notice(el, html) {
   el.prepend(n);
 }
 
+/* ---- main ---- */
 async function init() {
+  const btnMyReports = document.getElementById("btnMyReports");
+  const btnExample = document.getElementById("btnExample");
+  const loadingEl = document.getElementById("loading");
+  const repListEl = document.getElementById("repList");
+  const reportEl = document.getElementById("report");
+
   let me = null;
+  let myEvents = [];
+  let myReportsMode = false;
+  let exampleMode = false;
+
+  /* try to fetch user + their events */
   try {
     me = (await api("/api/auth?action=me")).user;
     const { events } = await api("/api/events?action=mine");
-    const withReports = events.filter((e) => e.lastReport).sort((a, b) => new Date(b.startsAt) - new Date(a.startsAt));
-    if (withReports.length) {
-      document.getElementById("loading").hidden = true;
-      const el = document.getElementById("report");
-      el.hidden = false;
-      renderReport(el, withReports[0].lastReport);
-      const rank = planRank(me.plan);
-      if (rank === 0) notice(el, `Showing your latest report from <b>${esc(withReports[0].title)}</b>. Upgrade to Gatherly Pro for Health Score, funnel, and benchmarks, or Ultra for AI summaries and forecasting. <a href="/pricing">See plans</a>`);
-      else if (rank === 1) notice(el, `Showing your latest report. Upgrade to Gatherly Ultra for AI summaries, forecasting, and staff intelligence. <a href="/pricing">See plans</a>`);
-      return;
-    }
+    myEvents = (events || []).filter((e) => e.lastReport).sort((a, b) => new Date(b.startsAt) - new Date(a.startsAt));
+    if (me) btnMyReports.style.display = "";
   } catch {}
 
-  setTimeout(() => {
-    document.getElementById("loading").hidden = true;
-    const el = document.getElementById("report");
-    el.hidden = false;
-    renderReport(el, SAMPLE);
-    notice(el, `This is an <b>exemplar Ultra Report</b> — every Gatherly Ultra analytic, filled with realistic sample data so you can see exactly what each event hands you. <a href="/advertise">List your first event</a> and your real report replaces this sample automatically. On Free and Pro, the boxes you haven't unlocked appear blurred with a one-tap upgrade.`);
-  }, 1000);
+  /* ---- My Reports button ---- */
+  btnMyReports.addEventListener("click", () => {
+    if (myReportsMode) {
+      /* collapse */
+      myReportsMode = false;
+      btnMyReports.classList.remove("active");
+      repListEl.hidden = true;
+      return;
+    }
+    myReportsMode = true;
+    exampleMode = false;
+    btnMyReports.classList.add("active");
+    btnExample.classList.remove("active");
+    reportEl.hidden = true;
+    repListEl.hidden = false;
+    renderReportList(myEvents, me?.plan || "free");
+  });
+
+  /* ---- Example button ---- */
+  btnExample.addEventListener("click", () => {
+    if (exampleMode) {
+      exampleMode = false;
+      btnExample.classList.remove("active");
+      reportEl.hidden = true;
+      return;
+    }
+    exampleMode = true;
+    myReportsMode = false;
+    btnExample.classList.add("active");
+    btnMyReports.classList.remove("active");
+    repListEl.hidden = true;
+    reportEl.hidden = false;
+
+    if (!reportEl.dataset.loaded) {
+      reportEl.dataset.loaded = "1";
+      renderReport(reportEl, SAMPLE);
+      const rank = planRank(me?.plan);
+      if (rank === 0) notice(reportEl, `This is an exemplar Ultra Report — every analytic filled with sample data. <a href="/advertise">List your first event</a> to generate a real one. Upgrade to unlock blurred sections. <a href="/pricing">See plans</a>`);
+      else if (rank === 1) notice(reportEl, `Exemplar Ultra Report. Upgrade to Gatherly Ultra to unlock AI summaries, forecasting and the full intelligence suite. <a href="/pricing">See plans</a>`);
+      else notice(reportEl, `This is an exemplar Ultra Report with realistic sample data. Your real reports appear under <b>My reports</b> above.`);
+    }
+  });
 }
+
 init();
