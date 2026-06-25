@@ -207,8 +207,5 @@ if (action === "portal" && req.method === "POST") {
     if (!r.ok) return json({ error: d.error?.message || "Could not open billing portal." }, 502);
     return json({ url: d.url });
   }
-
-  return json({ error: "Unknown action." }, 404);
-}
   return json({ error: "Unknown action." }, 404);
 }
