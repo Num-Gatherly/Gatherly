@@ -96,11 +96,18 @@ async function handler(req) {
   if (action === "list") {
     const q = (url.searchParams.get("q") || "").toLowerCase().trim();
     const filter = url.searchParams.get("filter") || "all";
+    const scenario = (url.searchParams.get("scenario") || "").toLowerCase().trim();
+    const tz = url.searchParams.get("tz") || "";
+    const duration = url.searchParams.get("duration") || "";
     let events = (await allEvents()).filter((e) => !isEnded(e));
     if (q) events = events.filter((e) => [e.title, e.scenario, e.description, e.hostUsername].filter(Boolean).join(" ").toLowerCase().includes(q));
+    if (scenario) events = events.filter((e) => (e.scenario || "").toLowerCase() === scenario);
     if (filter === "live") events = events.filter(isLive);
     if (filter === "upcoming") events = events.filter((e) => !isLive(e));
     if (filter === "boosted") events = events.filter((e) => e.boosted);
+    if (duration === "short") events = events.filter((e) => (e.durationMin || 0) <= 60);
+    if (duration === "medium") events = events.filter((e) => (e.durationMin || 0) > 60 && (e.durationMin || 0) <= 120);
+    if (duration === "long") events = events.filter((e) => (e.durationMin || 0) > 120);
 
     // Live count shown next to every active listing (live or upcoming), cached per host.
     const withCounts = await Promise.all(events.map(async (e) => {
