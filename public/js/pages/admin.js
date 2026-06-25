@@ -59,7 +59,7 @@ function switchTab(tab) {
   if (tab === "tests") loadThanksContent();
   if (tab === "executive" && me.role === "executive") loadExec();
   if (tab === "audit") loadAudit();
-  if (tab === "downtime") loadDowntime();
+
   if (tab === "analytics") loadAnalytics();
 }
 
@@ -890,7 +890,7 @@ const ACTION_LABELS = {
   "site.content-update": "Updated homepage content", "event.boost": "Boosted an event",
   "event.end": "Ended an event early", "event.delete": "Deleted an event",
   "watchdog.resolve": "Resolved a security flag", "watchdog.escalate": "Escalated a security flag",
-  "downtime.enable": "Enabled downtime mode", "downtime.disable": "Disabled downtime mode",
+  
 };
 const describeAction = (action) => ACTION_LABELS[action] || action;
 
@@ -923,38 +923,6 @@ async function loadAudit() {
   } catch (e) { host.innerHTML = `<p style="color:var(--red,#ff7a7a)">${esc(e.message)}</p>`; }
 }
 
-/* ========================== DOWNTIME ========================== */
-async function loadDowntime() {
-  try {
-    const { downtime } = await api("/api/admin?action=downtime-get");
-    const status = $("dtStatus");
-    const msgEl = $("dtMessage");
-    const urlEl = $("dtDiscordUrl");
-    if (status) {
-      if (downtime?.active) {
-        status.style.cssText = "margin-bottom:20px;padding:12px 16px;border-radius:10px;background:rgba(255,122,122,.08);border:1px solid rgba(255,122,122,.2);color:#ff7a7a;font-weight:600;";
-        status.textContent = `DOWNTIME ACTIVE - enabled by ${downtime.setBy || "unknown"} at ${new Date(downtime.setAt || Date.now()).toLocaleString()}`;
-      } else {
-        status.style.cssText = "margin-bottom:20px;padding:12px 16px;border-radius:10px;background:rgba(105,217,156,.08);border:1px solid rgba(105,217,156,.2);color:#69d99c;font-weight:600;";
-        status.textContent = "Site is live - no downtime active.";
-      }
-    }
-    if (msgEl && downtime?.message) msgEl.value = downtime.message;
-    if (urlEl && downtime?.discordUrl) urlEl.value = downtime.discordUrl;
-  } catch (e) { console.error("Downtime load error:", e); }
-}
-
-async function setDowntime(active) {
-  const message = $("dtMessage")?.value?.trim();
-  const discordUrl = $("dtDiscordUrl")?.value?.trim();
-  const msg = $("dtMsg");
-  try {
-    await api("/api/admin?action=downtime-set", { method: "POST", body: { active, message, discordUrl } });
-    await loadDowntime();
-    if (msg) msg.innerHTML = `<div class="alert alert-ok">${active ? "Downtime mode enabled. All pages now show the maintenance overlay." : "Downtime mode disabled. Site is back online."}</div>`;
-  } catch (e) {
-    if (msg) msg.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`;
-  }
 }
 
 /* ========================== ANALYTICS ========================== */
@@ -1096,8 +1064,6 @@ const ACTIONS = {
   "gen-code": () => genCode(),
   "revoke-code": (el) => revokeCode(el.dataset.key),
   "save-content": () => saveContent(),
-  "enable-downtime": () => setDowntime(true),
-  "disable-downtime": () => setDowntime(false),
   "reload-analytics": () => loadAnalytics(),
 };
 
